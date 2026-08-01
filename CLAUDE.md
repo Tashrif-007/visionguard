@@ -1,0 +1,431 @@
+# VisionGuard AI — CLAUDE.md
+
+## Project Overview
+
+VisionGuard AI is a lightweight, CPU-friendly CCTV surveillance platform that enhances visibility in hazy or smoggy environments in real time. It uses a **hybrid approach**: classical computer vision (Dark Channel Prior) combined with a Tiny CNN that refines the transmission map — not an end-to-end deep learning solution.
+
+The key optimization is **ROI-based dehazing**: dehazing only runs on the suspicious region detected via motion, not on every pixel of every frame. This keeps CPU usage low and makes the system edge-deployable without a GPU.
+
+**Target users:** security guards, building operators, campus/warehouse/parking-lot surveillance teams.
+
+---
+
+## Core Architecture Principle
+
+```
+Physics Prior (DCP) + Lightweight Learning (Tiny CNN)
+```
+
+NOT end-to-end deep learning. The CNN's only job is to refine the DCP transmission map. All image reconstruction uses the physical atmospheric scattering model.
+
+---
+
+## Dehazing Pipeline
+
+```
+Video Frame
+  → Motion Detection (skip if no motion)
+  → ROI Extraction
+  → Dark Channel Prior
+  → Atmospheric Light Estimation (Top-K brightest pixels, not single pixel)
+  → Initial Transmission Map
+  → Tiny CNN Refinement
+  → Radiance Recovery (Atmospheric Scattering Model)
+  → Gamma Correction
+  → Merge Enhanced ROI back into Frame
+```
+
+---
+
+## Tiny CNN Architecture
+
+Input channels: grayscale ROI + dark channel + coarse transmission map
+
+```
+Conv(3×3, 16) → ReLU
+Conv(3×3, 32) → ReLU
+Conv(3×3, 16) → ReLU
+Conv(3×3,  1) → Sigmoid
+→ Refined Transmission Map
+```
+
+Future: predict **residual** `Δt` instead of absolute `t`, so `t_final = t_DCP + Δt`.
+
+---
+
+## Features (MVP Scope)
+
+| Feature | Status |
+|---|---|
+| User authentication (JWT, admin-seeded accounts) | MVP |
+| Live webcam / IP camera / uploaded video feed | MVP |
+| Motion detection (skip dehazing when no motion) | MVP |
+| ROI extraction from motion mask | MVP |
+| Hybrid DCP + Tiny CNN dehazing pipeline | MVP |
+| Event logging (timestamp, image, type, ROI coords) | MVP |
+| Timeline / event browser | MVP |
+| Natural language event search (e.g. "any motion last night?") | MVP |
+| Multi-camera support (concurrent feeds, independent start/stop) | MVP |
+| Object detection / intrusion detection | Future only |
+| ONNX Runtime inference | Future only |
+| FFmpeg integration | Future only |
+
+Do **not** implement future items unless explicitly asked.
+
+---
+
+## Performance Goals
+
+- 30 FPS on CPU
+- No GPU required for inference
+- Low memory footprint
+- Edge deployable
+
+---
+
+## Tech Stack
+
+### Backend
+| Layer | Technology |
+|---|---|
+| Language | Python 3.11+ |
+| Web framework | FastAPI |
+| CV | OpenCV |
+| Numerics | NumPy |
+| Deep learning | PyTorch |
+| Inference (future) | ONNX Runtime |
+| Database | PostgreSQL via SQLAlchemy + psycopg2 |
+| Auth | PyJWT + passlib[bcrypt] |
+| Config | python-dotenv (.env) |
+| NLP query parsing | Claude API (Anthropic SDK) |
+| Linting | ruff, black, isort, mypy |
+
+### Frontend
+| Layer | Technology |
+|---|---|
+| Language | TypeScript |
+| Framework | React |
+| Bundler | Vite |
+| Styling | TailwindCSS + Shadcn UI |
+| Data fetching | React Query (TanStack Query) |
+| HTTP client | Axios |
+
+---
+
+## Project Structure
+
+```
+visionguard/
+├── backend/
+│   ├── api/
+│   │   ├── routers/          # FastAPI routers — route definitions only, no logic
+│   │   │   ├── auth.py
+│   │   │   ├── camera.py
+│   │   │   ├── events.py
+│   │   │   ├── search.py
+│   │   │   └── system.py
+│   │   └── dependencies.py   # FastAPI dependency injection helpers
+│   ├── controllers/          # Request/response orchestration, calls services
+│   │   ├── auth_controller.py
+│   │   ├── camera_controller.py
+│   │   └── event_controller.py
+│   ├── services/             # Business logic, pure functions, no HTTP concerns
+│   │   ├── dehazing/
+│   │   │   ├── dark_channel.py
+│   │   │   ├── atmosphere.py
+│   │   │   ├── transmission.py
+│   │   │   ├── radiance.py
+│   │   │   └── gamma.py
+│   │   ├── motion/
+│   │   │   ├── motion_detector.py
+│   │   │   └── roi.py
+│   │   ├── pipeline.py       # Orchestrates the full dehazing pipeline
+│   │   ├── auth_service.py   # Password verification, JWT issue/decode
+│   │   ├── event_service.py
+│   │   └── nlp_search.py     # Parses natural language queries into structured filters via Claude API
+│   ├── models/               # PyTorch model definitions
+│   │   └── tiny_cnn.py
+│   ├── schemas/              # Pydantic request/response schemas
+│   │   ├── auth.py           # LoginRequest, TokenResponse, UserRead, UserCreate
+│   │   ├── camera.py
+│   │   ├── event.py
+│   │   └── search.py         # SearchQuery, ParsedFilters, SearchResponse
+│   ├── db/
+│   │   ├── database.py       # SQLAlchemy engine, session factory
+│   │   ├── models.py         # ORM table definitions
+│   │   └── repositories/     # DB access — no raw queries outside here
+│   │       ├── event_repository.py
+│   │       └── user_repository.py
+│   ├── config.py             # Settings loaded from .env via pydantic-settings
+│   ├── main.py               # FastAPI app creation, router registration
+│   └── weights/              # Trained model weights (.pth / .onnx)
+├── frontend/
+│   ├── src/
+│   │   ├── api/              # Axios instances and typed API call functions
+│   │   │   ├── client.ts
+│   │   │   ├── authApi.ts
+│   │   │   ├── cameraApi.ts
+│   │   │   └── eventsApi.ts
+│   │   ├── components/       # Reusable UI components
+│   │   │   ├── ui/           # Shadcn-generated primitives
+│   │   │   ├── VideoFeed.tsx
+│   │   │   ├── EventCard.tsx
+│   │   │   └── Timeline.tsx
+│   │   ├── hooks/            # React Query hooks wrapping api/ calls
+│   │   │   ├── useAuth.ts
+│   │   │   ├── useCamera.ts
+│   │   │   ├── useEvents.ts
+│   │   │   └── useEventSearch.ts
+│   │   ├── pages/            # Route-level page components
+│   │   │   ├── LoginPage.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   └── EventsPage.tsx
+│   │   ├── types/            # Shared TypeScript types and interfaces
+│   │   │   └── index.ts
+│   │   ├── utils/            # Pure utility functions
+│   │   └── App.tsx
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── tailwind.config.ts
+├── training/
+│   ├── dataset.py
+│   └── train.py
+├── tests/
+│   ├── test_dark_channel.py
+│   ├── test_transmission.py
+│   ├── test_cnn_inference.py
+│   ├── test_motion_detector.py
+│   └── test_roi.py
+├── .env
+├── .env.example
+└── README.md
+```
+
+---
+
+## Backend Layer Responsibilities
+
+### `api/routers/`
+- Define routes with `APIRouter`.
+- No business logic — delegate immediately to a controller.
+- Only handle path/query params and return controller output.
+
+### `controllers/`
+- Orchestrate: validate input → call service(s) → format response.
+- No direct DB access. No raw CV logic.
+- Return Pydantic response schemas.
+
+### `services/`
+- All business logic lives here.
+- Functions must be pure where possible; avoid hidden state.
+- Dehazing, motion detection, event management are separate service modules.
+- `pipeline.py` is the only place that chains dehazing steps together.
+
+### `schemas/`
+- Pydantic models for every API request and response.
+- No ORM models exposed directly to the API layer.
+
+### `db/models.py`
+- SQLAlchemy ORM table definitions only.
+
+### `db/repositories/`
+- All DB read/write goes through repository functions.
+- Controllers call repositories via services — never directly.
+
+### `models/`
+- PyTorch `nn.Module` definitions.
+- No training code here — training lives in `/training/`.
+
+### `config.py`
+- Use `pydantic-settings` `BaseSettings` to load from `.env`.
+- Never hardcode paths, thresholds, or model paths anywhere else.
+
+---
+
+## Frontend Layer Responsibilities
+
+### `api/`
+- Typed Axios wrapper functions, one file per backend resource.
+- No React imports — pure async functions only.
+
+### `hooks/`
+- React Query `useQuery` / `useMutation` hooks that call `api/` functions.
+- All server state lives here; no raw `fetch`/`axios` in components.
+
+### `components/`
+- Presentational and container components.
+- Receive data via props or hooks — no direct API calls.
+
+### `pages/`
+- One component per route; compose hooks and components.
+
+### `types/`
+- Single source of truth for shared TypeScript interfaces.
+- Mirror backend Pydantic schema shapes.
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/auth/login` | Log in, returns a JWT access token |
+| GET | `/auth/me` | Current authenticated user |
+| POST | `/auth/users` | Create an operator account (admin only) |
+| PATCH | `/auth/password` | Change own password |
+| GET | `/cameras` | List currently active video sources |
+| POST | `/upload-video` | Upload a video file for processing (starts it as a new active source) |
+| POST | `/start-camera` | Start a live camera/webcam/IP feed as a new active source |
+| POST | `/stop-camera/{source_id}` | Stop one active feed by source id |
+| GET | `/events` | List logged events (with filters) |
+| GET | `/events/search` | Natural language event search (`?q=...`) |
+| GET | `/frame/{source_id}` | Latest processed frame for one active source |
+| GET | `/system/status` | Health and pipeline status |
+
+---
+
+## Authentication (planned — not yet implemented)
+
+JWT bearer authentication protecting every endpoint except `/auth/login`.
+
+**Flow:**
+```
+POST /auth/login { username, password }
+  → auth router → auth controller → auth_service.authenticate()
+  → verify bcrypt hash via user_repository
+  → issue signed JWT (JWT_SECRET_KEY, JWT_EXPIRE_MINUTES)
+  → frontend stores token, Axios interceptor adds Authorization: Bearer
+```
+
+**Key rules:**
+- Auth is enforced with a `get_current_user` dependency in `api/dependencies.py`, applied at the **router** level — never checked inside services or controllers.
+- **Admin-seeded accounts, no open signup**: on startup, if no users exist, a default admin is created from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`. The admin creates operator accounts via `POST /auth/users` (guarded by an admin-only dependency).
+- Roles: `admin` (account management + everything) and `operator` (everything except account management).
+- `User` ORM model in `db/models.py`: `id`, `username` (unique), `password_hash`, `role`, `created_at`. `video_sources` gains a nullable `created_by` FK → `users.id` for accountability.
+- Passwords hashed with bcrypt via passlib — plaintext never stored or logged.
+- New modules follow the standard layering: `api/routers/auth.py`, `controllers/auth_controller.py`, `services/auth_service.py`, `schemas/auth.py`, `db/repositories/user_repository.py`.
+- Frontend: `pages/LoginPage.tsx`, `hooks/useAuth.ts`, `api/authApi.ts`; token in localStorage; Axios request interceptor attaches the header; a 401 response interceptor clears the token and redirects to the login page.
+
+---
+
+## Natural Language Event Search
+
+Users type plain English queries on the Events page. The system returns matching logged events.
+
+**Flow:**
+```
+User query ("any motion last night?")
+  → GET /events/search?q=...
+  → search router → search controller
+  → nlp_search.py: send query to Claude API
+  → Claude returns structured ParsedFilters { from_ts, to_ts, event_type }
+  → event_repository: SQL query with those filters
+  → SearchResponse { query, parsed_filters, events, total }
+```
+
+**Key rules:**
+- `nlp_search.py` only calls the Claude API and returns `ParsedFilters` — no DB access.
+- The Claude API call is the only place that uses an LLM; everything else is standard SQL.
+- `ANTHROPIC_API_KEY` must be in `.env` and loaded via `config.py`.
+- If Claude cannot extract a time range, return all events (no filter) rather than erroring.
+- The frontend search input lives on the Events page; results reuse the existing `EventCard` component.
+
+**Schemas (`schemas/search.py`):**
+```
+SearchQuery       { q: str }
+ParsedFilters     { from_ts: datetime | None, to_ts: datetime | None, event_type: str | None }
+SearchResponse    { query: str, parsed_filters: ParsedFilters, events: list[EventRead], total: int }
+```
+
+---
+
+## Coding Standards
+
+### Python
+- Type hints on every function signature.
+- Use `dataclasses` or Pydantic models for structured data — no bare dicts.
+- Dependency injection via FastAPI `Depends()`.
+- Use `python-logging` everywhere — zero `print()` statements.
+- Raise meaningful, typed exceptions; never silently swallow errors.
+- Format with `black`, sort imports with `isort`, lint with `ruff`, type-check with `mypy`.
+- Follow PEP 8.
+
+### TypeScript / React
+- Strict TypeScript (`"strict": true` in tsconfig).
+- No `any` types.
+- All API responses typed against interfaces in `types/`.
+- All server state via React Query — no manual `useEffect` data fetching.
+- Components are small and single-purpose.
+
+---
+
+## Configuration (.env)
+
+```
+MODEL_PATH=
+VIDEO_SOURCE=
+CONFIDENCE_THRESHOLD=
+ROI_PADDING=
+
+POSTGRES_HOST=
+POSTGRES_PORT=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB=
+
+ANTHROPIC_API_KEY=
+
+JWT_SECRET_KEY=
+JWT_EXPIRE_MINUTES=
+ADMIN_USERNAME=
+ADMIN_PASSWORD=
+```
+
+All values loaded through `config.py`. No magic strings in code.
+
+---
+
+## What NOT To Do
+
+### Architecture
+- Do **not** put business logic in routers or route handlers.
+- Do **not** access the database directly from controllers — use repositories.
+- Do **not** import ORM models into API response schemas.
+- Do **not** put training code or weight loading inside service modules.
+- Do **not** use global mutable state for camera or pipeline state — use dependency injection.
+
+### AI / CV
+- Do **not** replace DCP with end-to-end deep learning.
+- Do **not** run the dehazing pipeline on every frame — only on frames with detected motion.
+- Do **not** process the full frame — only the extracted ROI.
+- Do **not** use a single brightest pixel for atmospheric light estimation (causes flickering) — use Top-K average.
+- Do **not** load model weights inside a request handler — load once at startup.
+
+### Auth
+- Do **not** store or log plaintext passwords — bcrypt via passlib only.
+- Do **not** hand-roll token signing or crypto — use PyJWT.
+- Do **not** check authentication inside services or controllers — auth is a router-level `Depends()` only.
+- Do **not** add open registration — accounts are created by the admin only.
+
+### General
+- Do **not** use `print()` — use `logging`.
+- Do **not** hardcode any path, threshold, or config value.
+- Do **not** commit `.env` files.
+- Do **not** use bare `except:` or silently ignore exceptions.
+- Do **not** add global variables to share state between modules.
+- Do **not** implement future features (object detection, ONNX, FFmpeg) unless explicitly asked.
+- Do **not** add abstractions or helpers that no current feature requires.
+
+---
+
+## Development Philosophy
+
+Priority order (in case of conflict):
+
+1. **Simplicity** — fewest moving parts that work correctly
+2. **Readability** — clear names, no clever tricks
+3. **Modularity** — each module has one responsibility
+4. **Explainability** — the system should remain interpretable, not a black box
+5. **CPU efficiency** — every optimization must serve the 30 FPS / no-GPU goal
+
+The neural network exists to refine DCP output, not to replace physics. Keep the hybrid identity intact.
