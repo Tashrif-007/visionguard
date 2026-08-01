@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/*
+  "Console" theme: warm near-black / warm paper, flat panels (hairline borders,
+  no shadows), sharp corners, single amber signal color. Amber is deliberate —
+  it's the color that cuts through haze (fog lights, old CRT security monitors),
+  which ties directly to what this product does. Reserved for live/active state
+  and primary actions only, everything else stays monochrome.
+*/
+
+:root {
+  --background: #f3f1ec;
+  --foreground: #16140f;
+  --card: #fdfcfa;
+  --card-foreground: #16140f;
+  --border: #d9d4c7;
+  --muted: #e9e5db;
+  --muted-foreground: #6b6558;
+  --primary: #a3540a;
+  --primary-foreground: #fdfcfa;
+  --accent: #a3540a;
+  --success: #15803d;
+  --warning: #a3540a;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fdfcfa;
+  --ring: #a3540a;
+}
+
+:root[data-theme='dark'] {
+  --background: #0b0a08;
+  --foreground: #ece7db;
+  --card: #131110;
+  --card-foreground: #ece7db;
+  --border: #2a2620;
+  --muted: #1b1815;
+  --muted-foreground: #938c7a;
+  --primary: #ffb000;
+  --primary-foreground: #1a1206;
+  --accent: #ffb000;
+  --success: #4ade80;
+  --warning: #ffb000;
+  --destructive: #f87171;
+  --destructive-foreground: #2a0a0a;
+  --ring: #ffb000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #0b0a08;
+    --foreground: #ece7db;
+    --card: #131110;
+    --card-foreground: #ece7db;
+    --border: #2a2620;
+    --muted: #1b1815;
+    --muted-foreground: #938c7a;
+    --primary: #ffb000;
+    --primary-foreground: #1a1206;
+    --accent: #ffb000;
+    --success: #4ade80;
+    --warning: #ffb000;
+    --destructive: #f87171;
+    --destructive-foreground: #2a0a0a;
+    --ring: #ffb000;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+#root {
+  min-height: 100svh;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
