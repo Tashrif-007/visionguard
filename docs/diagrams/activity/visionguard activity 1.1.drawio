@@ -1,0 +1,123 @@
+<mxfile host="app.diagrams.net" agent="Claude Code">
+  <diagram id="user-management-activity" name="User Management (Activity Level-1.1)">
+    <mxGraphModel dx="1498" dy="843" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="30" width="30" x="425" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="option" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" value="Option" vertex="1">
+          <mxGeometry height="70" width="140" x="370" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="loginInput" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" value="Enter username &amp; password" vertex="1">
+          <mxGeometry height="60" width="180" x="60" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="credValid" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" value="credentials valid?" vertex="1">
+          <mxGeometry height="70" width="140" x="80" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="issueJwt" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Log In to System" vertex="1">
+          <mxGeometry height="60" width="180" x="60" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="newOpInput" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" value="Enter new operator details" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="usernameFree" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" value="username free?" vertex="1">
+          <mxGeometry height="70" width="140" x="370" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="hashCreate" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Create Account" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="566" as="geometry" />
+        </mxCell>
+        <mxCell id="pwInput" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" value="Enter old &amp; new password" vertex="1">
+          <mxGeometry height="60" width="180" x="630" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="oldPwValid" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" value="old password valid?" vertex="1">
+          <mxGeometry height="70" width="140" x="650" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="d_GLwjC3kDooO_rHKNvR-1" edge="1" parent="1" source="updateHash" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="endOuter">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="717" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="updateHash" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Update password" vertex="1">
+          <mxGeometry height="60" width="180" x="630" y="566" as="geometry" />
+        </mxCell>
+        <mxCell id="endOuter" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="30" width="30" x="425" y="702" as="geometry" />
+        </mxCell>
+        <mxCell id="endInner" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="14" width="14" x="433" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="e-start-option" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="option">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-option-login" edge="1" parent="1" source="option" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" target="loginInput" value="log in">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-option-createop" edge="1" parent="1" source="option" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="newOpInput" value="create operator">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="440" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-option-changepw" edge="1" parent="1" source="option" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" target="pwInput" value="change password">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-loginInput-credValid" edge="1" parent="1" source="loginInput" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="credValid">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-credValid-loginInput" edge="1" parent="1" source="credValid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="loginInput" value="no">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="30" y="435" />
+              <mxPoint x="30" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-credValid-issueJwt" edge="1" parent="1" source="credValid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="issueJwt" value="yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-issueJwt-storeToken" edge="1" parent="1" source="issueJwt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="endOuter">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="717" />
+            </Array>
+            <mxPoint x="150" y="620" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-newOpInput-usernameFree" edge="1" parent="1" source="newOpInput" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="usernameFree">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-usernameFree-newOpInput" edge="1" parent="1" source="usernameFree" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="newOpInput" value="no">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="455" />
+              <mxPoint x="320" y="340" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-usernameFree-hashCreate" edge="1" parent="1" source="usernameFree" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="hashCreate" value="yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-hashCreate-end" edge="1" parent="1" source="hashCreate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="endOuter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-pwInput-oldPwValid" edge="1" parent="1" source="pwInput" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="oldPwValid">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-oldPwValid-pwInput" edge="1" parent="1" source="oldPwValid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="pwInput" value="no">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="435" />
+              <mxPoint x="830" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-oldPwValid-updateHash" edge="1" parent="1" source="oldPwValid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="updateHash" value="yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
