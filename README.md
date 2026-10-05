@@ -32,7 +32,7 @@ Configure environment variables:
 cp .env.example .env
 ```
 
-Fill in at least `POSTGRES_*`, `JWT_SECRET_KEY` (any long random string), and `ADMIN_PASSWORD` (used to seed the first admin account on startup). `ANTHROPIC_API_KEY` is optional. `MODEL_PATH` already points at the checked-in Tiny CNN weights (`backend/weights/tiny_cnn.pth`), no download needed.
+Fill in at least `POSTGRES_*`, `JWT_SECRET_KEY` (any long random string), and `ADMIN_EMAIL` and `ADMIN_PASSWORD` (used to seed the first admin account on startup; `ADMIN_NAME` is optional). `ANTHROPIC_API_KEY` is optional. `MODEL_PATH` already points at the checked-in Tiny CNN weights (`backend/weights/tiny_cnn.pth`), no download needed.
 
 Run the API from the repo root (imports are rooted at `backend.*`):
 
@@ -40,7 +40,7 @@ Run the API from the repo root (imports are rooted at `backend.*`):
 uvicorn backend.main:app --reload
 ```
 
-The API is now at `http://localhost:8000`, with interactive docs at `http://localhost:8000/docs`. On first startup it seeds an admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD` — log in with those, then use `POST /auth/users` to create operator accounts.
+The API is now at `http://localhost:8000`, with interactive docs at `http://localhost:8000/docs`. On first startup it seeds an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — log in with those (login is by email), then create operator accounts from the Admin page in the UI (or `POST /auth/users`).
 
 ## Frontend setup
 

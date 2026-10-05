@@ -1,0 +1,14 @@
+{
+  "name": "visionguard-final-report",
+  "private": true,
+  "description": "Generator for the VisionGuard final report (DOCX, PDF and LaTeX from one content model)",
+  "scripts": {
+    "diagrams": "node src/render_diagrams.js",
+    "shots": "node src/shots.js",
+    "docx": "node src/render_docx.js",
+    "pdf": "node src/render_pdf.js",
+    "tex": "node src/render_tex.js",
+    "all": "node src/render_docx.js && node src/render_pdf.js && node src/render_tex.js"
+  },
+  "dependencies": { "docx": "^9.0.0", "puppeteer-core": "^24.0.0" }
+}
