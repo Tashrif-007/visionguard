@@ -455,7 +455,7 @@ The neural network exists to refine DCP output, not to replace physics. Keep the
 5. **Camera health / system page (`/system`)** — per-camera FPS, latency, offline detection, CPU/memory; replaces the static `pipeline: "idle"` in `/system/status`.
 6. **Audit log (admin)** — who signed in, started/stopped cameras, deleted events (`audit_logs`, written from controllers).
 
-**Known open items:** live Claude query parsing is untested (no `ANTHROPIC_API_KEY`); outdoor dusk dehaze quality (CNN trained on indoor REVIDE + synthetic); no retention policy for snapshots/clips/uploads; `users.created_at` and other `server_default now()` columns are server-local naive time while `events.timestamp` is naive UTC; all of the above work is **uncommitted on `dev`** and the public repo (github.com/Tashrif-007/visionguard) does not have it yet.
+**Known open items:** live Claude query parsing is untested (no `ANTHROPIC_API_KEY`); outdoor dusk dehaze quality (CNN trained on indoor REVIDE + synthetic); no retention policy for snapshots/clips/uploads; `users.created_at` and other `server_default now()` columns are server-local naive time while `events.timestamp` is naive UTC; all of the above work is committed and pushed to `dev` on github.com/Tashrif-007/visionguard (merged from `feature/*` branches with `--no-ff`), but not yet merged into `main`.
 
 ## In-progress task: final report (SE-801 final defense)
 
