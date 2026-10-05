@@ -10,3 +10,6 @@ frontend/dist/
 frontend/.env
 *.db
 training/data/
+clips/
+docs/final-report/logs/
+docs/final-report/build/

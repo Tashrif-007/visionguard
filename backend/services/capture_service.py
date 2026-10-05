@@ -11,9 +11,12 @@ from backend.config import settings
 from backend.db.database import SessionLocal
 from backend.db.repositories import video_source_repository
 from backend.models.tiny_cnn import TinyTransmissionCNN
-from backend.services import event_service, pipeline
+from backend.services import event_service, pipeline, schedule as schedule_utils
+from backend.services.camera_config import CameraConfig
+from backend.services.clip_recorder import ClipRecorder, FinishedClip, write_clip
 from backend.services.motion.motion_detector import MotionDetector
 from backend.services.motion.roi import ROIBox, extract_roi
+from backend.services.motion.zones import build_zone_mask
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +75,16 @@ class _LatestFrameReader:
 class CaptureManager:
     """Owns the background capture thread and the latest processed frame."""
 
-    def __init__(self, model: TinyTransmissionCNN | None = None) -> None:
+    def __init__(self, model: TinyTransmissionCNN | None = None, config: CameraConfig | None = None) -> None:
         self._model = model
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._motion_streak = 0
+        self._config = config or CameraConfig()
+        self._zone_mask: tuple[CameraConfig, tuple[int, int], np.ndarray | None] | None = None
+        self._armed = True
+        self._armed_checked_at = float("-inf")
+        self._recorder = ClipRecorder()
         self._frame_lock = threading.Lock()
         self._latest_jpeg: bytes | None = None
 
@@ -86,6 +95,10 @@ class CaptureManager:
     def get_latest_jpeg(self) -> bytes | None:
         with self._frame_lock:
             return self._latest_jpeg
+
+    def update_config(self, config: CameraConfig) -> None:
+        # Single reference assignment: the capture thread reads self._config once per frame.
+        self._config = config
 
     def start(self, source_id: int, source_uri: str) -> None:
         self.stop()
@@ -120,12 +133,16 @@ class CaptureManager:
 
     def _run(self, capture: cv2.VideoCapture, source_id: int, is_file: bool) -> None:
         detector = MotionDetector(max_side=settings.motion_max_side)
+        self._recorder = ClipRecorder()
+        self._motion_streak = 0
         try:
             with ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-log") as executor:
                 if is_file:
                     self._run_file_source(capture, source_id, detector, executor)
                 else:
                     self._run_live_source(capture, source_id, detector, executor)
+                for clip in self._recorder.flush():
+                    executor.submit(write_clip, clip)
         except Exception:
             logger.exception("Capture loop for source id=%d crashed; deactivating", source_id)
             self._deactivate_source(source_id)
@@ -211,9 +228,14 @@ class CaptureManager:
         last_event_time: float,
         last_preview_at: float,
     ) -> tuple[float, float]:
+        # The background model keeps learning even while disarmed, so re-arming
+        # doesn't trigger a burst of false motion.
         mask = detector.apply(frame)
         bbox: ROIBox | None = None
-        if frame_number > settings.motion_warmup_frames:
+        if self._is_armed() and frame_number > settings.motion_warmup_frames:
+            zone_mask = self._get_zone_mask(mask.shape[:2])
+            if zone_mask is not None:
+                mask = cv2.bitwise_and(mask, zone_mask)
             bbox = extract_roi(
                 mask,
                 min_area=settings.motion_min_area,
@@ -228,12 +250,17 @@ class CaptureManager:
                 pipeline.dehaze_roi(roi_slice, model=self._model)
             )
             now = time.monotonic()
-            if now - last_event_time >= settings.event_cooldown_seconds:
+            self._motion_streak += 1
+            if (
+                self._motion_streak >= settings.motion_min_frames
+                and now - last_event_time >= settings.event_cooldown_seconds
+            ):
                 last_event_time = now
                 # Snapshot the frame (copy) before drawing the rectangle below,
                 # then log off-thread so disk I/O and the DB insert never
                 # stall the next capture.read().
-                executor.submit(self._log_event, source_id, frame.copy(), bbox, frame_number)
+                clip_path = self._recorder.start_clip()
+                executor.submit(self._log_event, source_id, frame.copy(), bbox, frame_number, str(clip_path))
             cv2.rectangle(
                 frame,
                 (bbox.x, bbox.y),
@@ -242,7 +269,13 @@ class CaptureManager:
                 2,
             )
 
+        else:
+            self._motion_streak = 0
+
         now = time.monotonic()
+        for clip in self._recorder.add_frame(frame, now):
+            executor.submit(write_clip, clip)
+
         if now - last_preview_at >= 1.0 / settings.preview_fps:
             last_preview_at = now
             preview = frame
@@ -263,7 +296,28 @@ class CaptureManager:
 
         return last_event_time, last_preview_at
 
-    def _log_event(self, source_id: int, frame: np.ndarray, bbox: ROIBox, frame_number: int) -> None:
+    def _is_armed(self) -> bool:
+        # The schedule only changes on minute boundaries; re-evaluate once a second.
+        now = time.monotonic()
+        if now - self._armed_checked_at >= 1.0:
+            self._armed_checked_at = now
+            self._armed = schedule_utils.is_armed(
+                schedule_utils.now_in_timezone(settings.schedule_timezone), self._config.schedule
+            )
+        return self._armed
+
+    def _get_zone_mask(self, shape: tuple[int, int]) -> np.ndarray | None:
+        config = self._config
+        cached = self._zone_mask
+        if cached is not None and cached[0] is config and cached[1] == shape:
+            return cached[2]
+        mask = build_zone_mask(shape, config.zones)
+        self._zone_mask = (config, shape, mask)
+        return mask
+
+    def _log_event(
+        self, source_id: int, frame: np.ndarray, bbox: ROIBox, frame_number: int, clip_path: str
+    ) -> None:
         db = SessionLocal()
         try:
             event_service.log_motion_event(
@@ -272,6 +326,7 @@ class CaptureManager:
                 frame=frame,
                 bbox=bbox,
                 frame_number=frame_number,
+                clip_path=clip_path,
             )
         except Exception:
             logger.exception("Failed to log motion event for source id=%d", source_id)
@@ -301,11 +356,17 @@ class CapturePool:
         self._lock = threading.Lock()
         self._managers: dict[int, CaptureManager] = {}
 
-    def start(self, source_id: int, source_uri: str) -> None:
-        manager = CaptureManager(model=self._model)
+    def start(self, source_id: int, source_uri: str, config: CameraConfig | None = None) -> None:
+        manager = CaptureManager(model=self._model, config=config)
         manager.start(source_id=source_id, source_uri=source_uri)
         with self._lock:
             self._managers[source_id] = manager
+
+    def update_config(self, source_id: int, config: CameraConfig) -> None:
+        with self._lock:
+            manager = self._managers.get(source_id)
+        if manager is not None:
+            manager.update_config(config)
 
     def stop(self, source_id: int) -> None:
         with self._lock:
