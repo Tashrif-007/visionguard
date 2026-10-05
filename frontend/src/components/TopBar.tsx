@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import { CalendarClock, Moon, Sun } from 'lucide-react'
+import { CalendarClock } from 'lucide-react'
 import { SystemStatusPanel } from '@/components/SystemStatusPanel'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { UserMenu } from '@/components/UserMenu'
-import { Button } from '@/components/ui/button'
-import { useTheme } from '@/hooks/useTheme'
 
 function formatClock(date: Date): string {
   return date.toLocaleString(undefined, {
@@ -18,7 +17,6 @@ function formatClock(date: Date): string {
 
 export function TopBar({ title }: { title: string }) {
   const [now, setNow] = useState(() => new Date())
-  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000)
@@ -38,15 +36,7 @@ export function TopBar({ title }: { title: string }) {
         <div className="hidden xl:block">
           <SystemStatusPanel compact />
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
+        <ThemeToggle />
         <div className="h-6 w-px bg-border" />
         <UserMenu />
       </div>

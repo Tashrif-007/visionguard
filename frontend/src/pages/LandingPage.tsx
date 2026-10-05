@@ -13,6 +13,7 @@ import {
   Video,
 } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/hooks/useAuth'
 
@@ -53,9 +54,12 @@ export function LandingPage() {
           </span>
           <span className="text-sm font-semibold">VisionGuard AI</span>
         </div>
-        <Button size="sm" onClick={goToApp}>
-          {user ? 'Go to dashboard' : 'Sign in'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button size="sm" onClick={goToApp}>
+            {user ? 'Go to dashboard' : 'Sign in'}
+          </Button>
+        </div>
       </header>
 
       {/* Asymmetric split hero — headline + CTA on the left, a real hazy→clear
