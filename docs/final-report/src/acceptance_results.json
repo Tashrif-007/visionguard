@@ -1,0 +1,261 @@
+[
+  {
+    "case_id": "TC-01",
+    "title": "Admin login with valid credentials",
+    "expected": "200 and a JWT access token",
+    "actual": "200, token issued=True",
+    "passed": true
+  },
+  {
+    "case_id": "TC-02",
+    "title": "Login with a wrong password",
+    "expected": "401, no token",
+    "actual": "401",
+    "passed": true
+  },
+  {
+    "case_id": "TC-03",
+    "title": "Protected route without a token",
+    "expected": "401 before any controller logic",
+    "actual": "401",
+    "passed": true
+  },
+  {
+    "case_id": "TC-04",
+    "title": "Admin creates an operator account",
+    "expected": "200/201 with role operator",
+    "actual": "201, role=operator",
+    "passed": true
+  },
+  {
+    "case_id": "TC-05",
+    "title": "Two accounts may share a display name",
+    "expected": "200/201 (email is the unique key, not the name)",
+    "actual": "201",
+    "passed": true
+  },
+  {
+    "case_id": "TC-06",
+    "title": "Operator cannot create accounts",
+    "expected": "403, no account created",
+    "actual": "403",
+    "passed": true
+  },
+  {
+    "case_id": "TC-07",
+    "title": "Operator cannot delete events",
+    "expected": "403",
+    "actual": "403",
+    "passed": true
+  },
+  {
+    "case_id": "TC-08",
+    "title": "Change password with a wrong current password",
+    "expected": "Rejected (4xx), password unchanged",
+    "actual": "401",
+    "passed": true
+  },
+  {
+    "case_id": "TC-09",
+    "title": "Change password with the correct current password",
+    "expected": "2xx, and the new password logs in",
+    "actual": "200, relogin=200",
+    "passed": true
+  },
+  {
+    "case_id": "TC-10",
+    "title": "Deactivated account cannot sign in",
+    "expected": "401 on login after deactivation",
+    "actual": "deactivate=200, login=401",
+    "passed": true
+  },
+  {
+    "case_id": "TC-11",
+    "title": "Admin cannot deactivate own account",
+    "expected": "Rejected (4xx)",
+    "actual": "400",
+    "passed": true
+  },
+  {
+    "case_id": "TC-12",
+    "title": "Start a camera with an unreachable source",
+    "expected": "400 with a clear message, source not left active",
+    "actual": "400: Cannot open video source: /nonexistent/video.mp4",
+    "passed": true
+  },
+  {
+    "case_id": "TC-13",
+    "title": "Upload a non-video file",
+    "expected": "400 validation error",
+    "actual": "400",
+    "passed": true
+  },
+  {
+    "case_id": "TC-14",
+    "title": "Stop a camera that is not active",
+    "expected": "404, no unhandled error",
+    "actual": "404",
+    "passed": true
+  },
+  {
+    "case_id": "TC-15",
+    "title": "Upload a valid video and fetch a processed frame",
+    "expected": "Upload 200; /frame returns a JPEG",
+    "actual": "/frame=200 image/jpeg 28314 bytes",
+    "passed": true
+  },
+  {
+    "case_id": "TC-16",
+    "title": "Static scene: no motion, no events",
+    "expected": "0 events",
+    "actual": "0 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-17",
+    "title": "Motion shorter than MOTION_MIN_FRAMES is ignored",
+    "expected": "0 events for a 6-frame blip repeated every 3 s",
+    "actual": "0 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-18",
+    "title": "Moving object logs events with ROI geometry",
+    "expected": ">= 1 event; ROI width/height > 0",
+    "actual": "3 events; first ROI=60x134",
+    "passed": true
+  },
+  {
+    "case_id": "TC-19",
+    "title": "Each event stores its ROI area ratio",
+    "expected": "roi_area_ratio in (0, 1) on every event",
+    "actual": "ratios=[0.0349, 0.0372, 0.0608]",
+    "passed": true
+  },
+  {
+    "case_id": "TC-20",
+    "title": "Event cooldown throttles logging",
+    "expected": "Gap between events >= 5 s (1 s tolerance)",
+    "actual": "min gap=6.0 s over 2 gaps",
+    "passed": true
+  },
+  {
+    "case_id": "TC-21",
+    "title": "Exclude zone over the motion suppresses events",
+    "expected": "0 events",
+    "actual": "0 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-22",
+    "title": "Include zone away from the motion suppresses events",
+    "expected": "0 events",
+    "actual": "0 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-23",
+    "title": "Include zone covering the motion keeps events",
+    "expected": ">= 1 event",
+    "actual": "3 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-24",
+    "title": "Disarmed schedule logs nothing",
+    "expected": "armed=false in config, 0 events, PUT 200",
+    "actual": "PUT=200, armed=False, 0 events",
+    "passed": true
+  },
+  {
+    "case_id": "TC-25",
+    "title": "Zone with a point outside 0..1 is rejected",
+    "expected": "400",
+    "actual": "400",
+    "passed": true
+  },
+  {
+    "case_id": "TC-26",
+    "title": "Zone with fewer than 3 points is rejected",
+    "expected": "422 (schema validation)",
+    "actual": "422",
+    "passed": true
+  },
+  {
+    "case_id": "TC-27",
+    "title": "Schedule with identical start and end is rejected",
+    "expected": "400",
+    "actual": "400",
+    "passed": true
+  },
+  {
+    "case_id": "TC-28",
+    "title": "Re-adding a camera with the same URI keeps its zones",
+    "expected": "New source has the 'keep me' zone",
+    "actual": "zones=['keep me']",
+    "passed": true
+  },
+  {
+    "case_id": "TC-29",
+    "title": "Snapshot endpoint returns the JPEG",
+    "expected": "200 image/jpeg",
+    "actual": "200 image/jpeg 104942 bytes",
+    "passed": true
+  },
+  {
+    "case_id": "TC-30",
+    "title": "Clip endpoint returns a playable WebM",
+    "expected": "200 video/webm, non-empty, has_clip=true",
+    "actual": "200 video/webm 1029258 bytes, has_clip=True",
+    "passed": true
+  },
+  {
+    "case_id": "TC-31",
+    "title": "Snapshot of an unknown event",
+    "expected": "404",
+    "actual": "404",
+    "passed": true
+  },
+  {
+    "case_id": "TC-32",
+    "title": "Timeline pagination and filtering",
+    "expected": "limit=1 returns 1 event; total unchanged",
+    "actual": "returned=1, total=3",
+    "passed": true
+  },
+  {
+    "case_id": "TC-33",
+    "title": "Time filter in the future returns nothing",
+    "expected": "0 events",
+    "actual": "0",
+    "passed": true
+  },
+  {
+    "case_id": "TC-34",
+    "title": "Analytics totals are internally consistent",
+    "expected": "total equals per-day, per-camera, heatmap and coverage sums",
+    "actual": "total=607",
+    "passed": true
+  },
+  {
+    "case_id": "TC-35",
+    "title": "Natural-language search falls back when no API key is configured",
+    "expected": "200, empty filters, all events returned",
+    "actual": "200 filters={'from_ts': None, 'to_ts': None, 'event_type': None} total=607",
+    "passed": true
+  },
+  {
+    "case_id": "TC-36",
+    "title": "System status reports a healthy database",
+    "expected": "200 and database ok",
+    "actual": "200 {'status': 'ok', 'database': 'ok', 'pipeline': 'idle'}",
+    "passed": true
+  },
+  {
+    "case_id": "TC-37",
+    "title": "Admin deletes an event and its files",
+    "expected": "204; snapshot file removed",
+    "actual": "204, existed=True, removed=True",
+    "passed": true
+  }
+]

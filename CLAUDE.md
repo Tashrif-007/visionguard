@@ -278,19 +278,29 @@ visionguard/
 | POST | `/start-camera` | Start a live camera/webcam/IP feed as a new active source |
 | POST | `/stop-camera/{source_id}` | Stop one active feed by source id |
 | GET | `/events` | List logged events (with filters) |
+| GET | `/events/{id}/snapshot` | Event snapshot JPEG (authenticated; replaces the old open `/snapshots` mount) |
+| DELETE | `/events/{id}` | Delete an event (admin only) |
+| PATCH | `/auth/profile` | Update own name/email |
+| GET | `/auth/users` | List accounts (admin only) |
+| PATCH | `/auth/users/{user_id}/status` | Activate/deactivate an account (admin only) |
 | GET | `/events/search` | Natural language event search (`?q=...`) |
+| GET | `/events/stats` | Aggregated event counts (per day, per camera, weekday×hour heatmap, motion-size buckets) |
+| GET | `/events/{id}/clip` | Event video clip (WebM, authenticated; written a few seconds after the event) |
+| GET | `/cameras/{source_id}/config` | Detection zones, schedule, and armed state for a camera |
+| PUT | `/cameras/{source_id}/zones` | Replace a camera's include/exclude detection zones |
+| PUT | `/cameras/{source_id}/schedule` | Set a camera's arming schedule |
 | GET | `/frame/{source_id}` | Latest processed frame for one active source |
 | GET | `/system/status` | Health and pipeline status |
 
 ---
 
-## Authentication (planned — not yet implemented)
+## Authentication (implemented)
 
 JWT bearer authentication protecting every endpoint except `/auth/login`.
 
 **Flow:**
 ```
-POST /auth/login { username, password }
+POST /auth/login { email, password }
   → auth router → auth controller → auth_service.authenticate()
   → verify bcrypt hash via user_repository
   → issue signed JWT (JWT_SECRET_KEY, JWT_EXPIRE_MINUTES)
@@ -299,9 +309,9 @@ POST /auth/login { username, password }
 
 **Key rules:**
 - Auth is enforced with a `get_current_user` dependency in `api/dependencies.py`, applied at the **router** level — never checked inside services or controllers.
-- **Admin-seeded accounts, no open signup**: on startup, if no users exist, a default admin is created from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`. The admin creates operator accounts via `POST /auth/users` (guarded by an admin-only dependency).
+- **Admin-seeded accounts, no open signup**: on startup, if no users exist, a default admin is created from `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`. The admin creates operator accounts via `POST /auth/users` (guarded by an admin-only dependency).
 - Roles: `admin` (account management + everything) and `operator` (everything except account management).
-- `User` ORM model in `db/models.py`: `id`, `username` (unique), `password_hash`, `role`, `created_at`. `video_sources` gains a nullable `created_by` FK → `users.id` for accountability.
+- `User` ORM model in `db/models.py`: `id`, `name`, `email` (unique), `password_hash`, `role`, `is_active`, `created_at`. Deactivated users cannot log in. `video_sources` gains a nullable `created_by` FK → `users.id` for accountability.
 - Passwords hashed with bcrypt via passlib — plaintext never stored or logged.
 - New modules follow the standard layering: `api/routers/auth.py`, `controllers/auth_controller.py`, `services/auth_service.py`, `schemas/auth.py`, `db/repositories/user_repository.py`.
 - Frontend: `pages/LoginPage.tsx`, `hooks/useAuth.ts`, `api/authApi.ts`; token in localStorage; Axios request interceptor attaches the header; a 401 response interceptor clears the token and redirects to the login page.
@@ -377,7 +387,8 @@ ANTHROPIC_API_KEY=
 
 JWT_SECRET_KEY=
 JWT_EXPIRE_MINUTES=
-ADMIN_USERNAME=
+ADMIN_NAME=
+ADMIN_EMAIL=
 ADMIN_PASSWORD=
 ```
 
@@ -429,3 +440,29 @@ Priority order (in case of conflict):
 5. **CPU efficiency** — every optimization must serve the 30 FPS / no-GPU goal
 
 The neural network exists to refine DCP output, not to replace physics. Keep the hybrid identity intact.
+
+---
+
+## Roadmap — features proposed after the MVP (read before starting a new session)
+
+**Already implemented (do not redo):** multi-camera `CapturePool`; per-camera detection zones (include/exclude polygons) and weekly arming schedules (`camera_zones`, `camera_schedules`, `PUT /cameras/{id}/zones|schedule`, applied live, copied to a re-added source with the same `source_uri`); motion persistence (`MOTION_MIN_FRAMES`) + `events.roi_area_ratio`; event video clips (`services/clip_recorder.py`, VP8 WebM, `GET /events/{id}/clip`); events analytics (`GET /events/stats`, `/analytics` page). Events stay labelled `motion` — never "intruder" (frame differencing cannot classify; classification is future work).
+
+**Proposed next modules (not implemented; user has only approved discussing them — confirm scope before building).** Each adds a frontend page:
+1. **Cameras registry page (`/cameras`)** — saved cameras (name, URI, status), start/stop, zones, schedule, delete; removes the "re-add the camera every time" friction. Needs a persistent `cameras` concept separate from running `video_sources`.
+2. **Haze analytics (`/analytics/haze`)** — per-camera visibility score over time from the mean transmission, raw vs dehazed side-by-side on events (store the raw snapshot too), optional "dehaze only when haze is detected" to save CPU.
+3. **Alerts (`/alerts`)** — rules (camera, schedule, min `roi_area_ratio`) delivering by email / webhook / Telegram, plus a delivery log (`alert_rules`, `alert_deliveries`), fired off-thread from event logging.
+4. **Event review workflow** — status (new / reviewed / flagged), notes, bulk actions on the timeline, CSV/PDF export (`events.status`, `events.notes`).
+5. **Camera health / system page (`/system`)** — per-camera FPS, latency, offline detection, CPU/memory; replaces the static `pipeline: "idle"` in `/system/status`.
+6. **Audit log (admin)** — who signed in, started/stopped cameras, deleted events (`audit_logs`, written from controllers).
+
+**Known open items:** live Claude query parsing is untested (no `ANTHROPIC_API_KEY`); outdoor dusk dehaze quality (CNN trained on indoor REVIDE + synthetic); no retention policy for snapshots/clips/uploads; `users.created_at` and other `server_default now()` columns are server-local naive time while `events.timestamp` is naive UTC; all of the above work is **uncommitted on `dev`** and the public repo (github.com/Tashrif-007/visionguard) does not have it yet.
+
+## In-progress task: final report (SE-801 final defense)
+
+Goal: take the user's **existing** `docs/SPL3-Technical-Report-1448.docx` and **only append** new chapters — never change existing content, fonts or sizes (the file is a PDF-to-Word conversion: Times New Roman, Body Text 14 pt, Heading 1 16 pt bold, Heading 2 14 pt bold, tables 11 pt, A4 11920×16840 twips with 0 page margins and paragraph indents of 1020/1045, headings numbered through `numId=2`, figure captions "Fig N: …", table captions as Heading 2 "Table N: …"). Deliver **DOCX only** (the user rejected the earlier PDF/LaTeX rebuild that restyled everything; those outputs were deleted).
+
+New chapters to append after the existing chapter 6 (Timeline): 7 Component-Level Design, 8 Interface Design, 9 Implementation, 10 Testing, 11 User Manual, 12 Repository/Installer/Compliance. Content is already written in `docs/final-report/src/docx_content.js` (numbering continues from Fig 19 / Table 5 / chapter 7; `node src/export_blocks.js` writes `build/blocks.json`). Assets exist in `docs/final-report/assets/{diagrams,shots,trim}`; test results are in `src/acceptance_results.json` (37/37 pass), `src/unit_results.json` (40/40), `src/perf.json`.
+
+**Still to do:** write `docs/final-report/src/append_docx.py` (lxml) that unzips the original, inserts the new body elements before the final `w:sectPr`, cloning the existing XML patterns (BodyText/ListParagraph/Heading1/TableParagraph paragraphs, bordered fixed tables with `tblInd`≈1000, centered captions, inline images with new `word/media` files + `document.xml.rels` entries, a new decimal `abstractNum` for numbered lists, bookmarks `h.vg_*` and extra TOC1/TOC3 entries with `PAGEREF` fields, `w:updateFields` in `settings.xml`); output `docs/SPL3-Final-Report-1448.docx`; validate with the docx skill's `validate.py` (needs `defusedxml`); check the look with a `docx-preview` render in headless Chrome (no LibreOffice is installed). Target: roughly 50–60 pages in total (existing ≈ 30).
+
+Rebuild helpers live in `docs/final-report/` (`render_diagrams.js`, `shots.js`, `bench.py`, `trim_images.py`, `tests/acceptance_api.py`). The old PDF/DOCX/LaTeX generator (`render_docx.js`, `render_pdf.js`, `render_tex.js`, `src/content/*`) is superseded by the append approach and can be deleted.
