@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.config import settings
 from backend.db.models import VideoSource
 from backend.db.repositories import video_source_repository
+from backend.services import zone_service
 from backend.services.capture_service import CaptureError, CapturePool
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,13 @@ def _activate_and_capture(
         is_active=True,
         created_by=created_by,
     )
+    zone_service.inherit_config(db, source.id, source_uri)
     try:
-        pool.start(source_id=source.id, source_uri=source_uri)
+        pool.start(
+            source_id=source.id,
+            source_uri=source_uri,
+            config=zone_service.load_runtime_config(db, source.id),
+        )
     except CaptureError:
         video_source_repository.deactivate_source(db, source.id)
         logger.warning("Capture failed to start for uri=%s; source deactivated", source_uri)

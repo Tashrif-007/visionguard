@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserRole(str, Enum):
@@ -10,7 +10,7 @@ class UserRole(str, Enum):
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
+    email: EmailStr
     password: str = Field(min_length=1, max_length=72)
 
 
@@ -24,13 +24,16 @@ class UserRead(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    username: str
+    name: str
+    email: EmailStr
     role: UserRole
+    is_active: bool
     created_at: datetime
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
+    name: str = Field(min_length=1, max_length=64)
+    email: EmailStr
     password: str = Field(min_length=8, max_length=72)
     role: UserRole = UserRole.OPERATOR
 
@@ -38,3 +41,12 @@ class UserCreate(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=72)
     new_password: str = Field(min_length=8, max_length=72)
+
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    email: EmailStr

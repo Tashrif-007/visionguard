@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     motion_min_area: int = 500
     motion_warmup_frames: int = 30
     event_cooldown_seconds: float = 5.0
+    motion_min_frames: int = 15
+    schedule_timezone: str = "UTC"
+    max_zones_per_camera: int = 10
+    clip_dir: str = "clips"
+    clip_pre_seconds: float = 4.0
+    clip_post_seconds: float = 6.0
+    clip_fps: float = 10.0
+    clip_max_width: int = 640
 
     dcp_patch_size: int = 15
     atmo_top_k_ratio: float = 0.001
@@ -29,7 +37,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-insecure-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 720
-    admin_username: str = "admin"
+    admin_name: str = "Admin"
+    admin_email: str = "admin@example.com"
     admin_password: str = ""
 
     motion_max_side: int = 480

@@ -4,12 +4,11 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
 from backend.db.database import Base, SessionLocal, engine
-from backend.db.repositories import video_source_repository
-from backend.api.routers import auth, camera, events, search, system
+from backend.db.repositories import event_repository, user_repository, video_source_repository
+from backend.api.routers import auth, camera, events, search, system, zones
 from backend.models.tiny_cnn import load_tiny_cnn
 from backend.services import auth_service, runtime_tuning
 from backend.services.capture_service import CapturePool
@@ -28,6 +27,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     db = SessionLocal()
     try:
         video_source_repository.ensure_created_by_column(db)
+        event_repository.ensure_roi_area_ratio_column(db)
+        event_repository.ensure_clip_path_column(db)
+        user_repository.ensure_is_active_column(db)
+        user_repository.ensure_email_column(db)
         auth_service.seed_admin(db)
         stale = video_source_repository.deactivate_active_sources(db)
         if stale:
@@ -56,7 +59,4 @@ app.include_router(auth.router)
 app.include_router(search.router)
 app.include_router(events.router)
 app.include_router(camera.router)
-
-# Serves logged event snapshot images (backend/../snapshots/<file>.jpg) so a
-# frontend can render event thumbnails directly from image_path.
-app.mount("/snapshots", StaticFiles(directory=settings.snapshot_dir), name="snapshots")
+app.include_router(zones.router)
