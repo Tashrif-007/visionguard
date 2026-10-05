@@ -10,7 +10,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   if (isLoading) {
     return (
-      <div className="flex h-svh items-center justify-center text-sm text-[var(--muted-foreground)]">
+      <div className="label-mono flex h-svh items-center justify-center text-muted-foreground">
         Checking session…
       </div>
     )
