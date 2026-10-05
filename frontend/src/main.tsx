@@ -7,7 +7,7 @@ import App from './App.tsx'
 import { getStoredTheme } from '@/hooks/useTheme'
 
 // Applied synchronously before the first paint so the app never flashes the wrong theme.
-document.documentElement.dataset.theme = getStoredTheme()
+document.documentElement.classList.toggle('dark', getStoredTheme() === 'dark')
 
 const queryClient = new QueryClient({
   defaultOptions: {

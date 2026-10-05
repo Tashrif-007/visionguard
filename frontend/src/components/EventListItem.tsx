@@ -1,34 +1,43 @@
-import { Badge } from '@/components/ui/badge'
-import type { Event } from '@/types'
-import { formatRelative, formatTimestamp } from '@/utils/format'
-import { snapshotUrl } from '@/utils/urls'
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { TableCell, TableRow } from "@/components/ui/table";
+import { EventThumb } from "@/components/EventThumb";
+import { useSnapshotObjectUrl } from "@/hooks/useSnapshotObjectUrl";
+import type { Event } from "@/types";
+import { formatRelative, formatTimestamp } from "@/utils/format";
 
-export function EventListItem({ event }: { event: Event }) {
+export function EventListItem({
+  event,
+  actions,
+}: {
+  event: Event;
+  actions?: ReactNode;
+}) {
+  // Separate fetch of the same cached query, purely to get an href for
+  // "open full size" — EventThumb already renders the image itself.
+  const { objectUrl } = useSnapshotObjectUrl(event.id);
+
   return (
-    <a
-      href={snapshotUrl(event.image_path)}
-      target="_blank"
-      rel="noreferrer"
-      className="flex items-center gap-3 py-2.5 transition-colors hover:bg-[var(--muted)]"
-    >
-      <img
-        src={snapshotUrl(event.image_path)}
-        alt={`${event.event_type} event snapshot`}
-        className="h-12 w-16 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--muted)] object-cover"
-        loading="lazy"
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{event.event_type}</Badge>
-          <span className="font-mono text-xs text-[var(--muted-foreground)]">
-            {formatRelative(event.timestamp)}
-          </span>
-        </div>
-        <div className="truncate font-mono text-[11px] text-[var(--muted-foreground)]">
-          {formatTimestamp(event.timestamp)} · ROI {event.roi_width}×{event.roi_height} @ ({event.roi_x},{' '}
-          {event.roi_y})
-        </div>
-      </div>
-    </a>
-  )
+    <TableRow>
+      <TableCell>
+        <a href={objectUrl ?? undefined} target="_blank" rel="noreferrer">
+          <EventThumb event={event} className="h-12 w-16" />
+        </a>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline">{event.event_type}</Badge>
+      </TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+        {formatTimestamp(event.timestamp)}
+        <div>{formatRelative(event.timestamp)}</div>
+      </TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+        {event.roi_width}×{event.roi_height} @ ({event.roi_x}, {event.roi_y})
+        {event.roi_area_ratio !== null && (
+          <div>{(event.roi_area_ratio * 100).toFixed(1)}% of frame</div>
+        )}
+      </TableCell>
+      {actions && <TableCell className="text-right">{actions}</TableCell>}
+    </TableRow>
+  );
 }

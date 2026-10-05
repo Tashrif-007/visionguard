@@ -1,25 +1,62 @@
 import { useMemo, useState } from 'react'
-import { LayoutGrid, Maximize2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, History, LayoutGrid, Maximize2, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { CameraChipBar } from '@/components/CameraChipBar'
+import { CameraControls } from '@/components/CameraControls'
 import { CameraGrid } from '@/components/CameraGrid'
 import { CameraTile } from '@/components/CameraTile'
-import { CameraControls } from '@/components/CameraControls'
-import { CameraListSidebar } from '@/components/CameraListSidebar'
-import { SystemStatusPanel } from '@/components/SystemStatusPanel'
-import { Timeline } from '@/components/Timeline'
+import { LiveDot } from '@/components/LiveDot'
+import { RecentEventsStrip } from '@/components/RecentEventsStrip'
 import { useActiveCameras } from '@/hooks/useCamera'
 import { useEvents } from '@/hooks/useEvents'
-import { cn } from '@/utils/cn'
+import { cn } from 'cn'
 
 type ViewMode = 'grid' | 'focus'
 
+function ViewToggleButton({
+  active,
+  disabled,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean
+  disabled?: boolean
+  onClick: () => void
+  icon: typeof LayoutGrid
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={`${label} view`}
+      aria-label={`${label} view`}
+      aria-pressed={active}
+      className={cn(
+        'label-mono flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+        active
+          ? 'bg-secondary text-primary shadow-[0_0_12px_color-mix(in_oklab,var(--primary)_20%,transparent)]'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  )
+}
+
 export function Dashboard() {
-  const [showAddCamera, setShowAddCamera] = useState(false)
+  const [addCameraOpen, setAddCameraOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
   const { data: cameras, isLoading } = useActiveCameras()
-  const { data: recentEvents } = useEvents({ limit: 8 })
+  const { data: recentEvents } = useEvents({ limit: 10 })
 
   const list = cameras ?? []
   const focusCamera = useMemo(() => list.find((c) => c.id === selectedId) ?? null, [list, selectedId])
@@ -30,90 +67,85 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex h-full">
-      <CameraListSidebar
-        cameras={list}
-        search={search}
-        onSearchChange={setSearch}
-        selectedId={selectedId}
-        onSelect={handleSelect}
-        isAddOpen={showAddCamera}
-        onAddClick={() => setShowAddCamera((v) => !v)}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-3">
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {focusCamera ? focusCamera.name : 'All cameras'}
-            </h2>
-            <p className="font-mono text-sm">
+    <div className="flex h-full flex-col gap-3 p-5">
+      {/* Control deck — title, view mode, add-camera action, camera filter */}
+      <section className="flex shrink-0 flex-col gap-3 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <LiveDot size="md" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Live monitoring</h2>
+            <span className="label-mono rounded-sm bg-muted px-2 py-0.5 text-muted-foreground">
               {list.length} active source{list.length === 1 ? '' : 's'}
-            </p>
+            </span>
           </div>
-          <div className="flex items-center rounded-sm border border-[var(--border)]">
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              title="Grid view"
-              aria-label="Grid view"
-              className={cn(
-                'flex h-8 w-8 items-center justify-center transition-colors',
-                viewMode === 'grid'
-                  ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                  : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]',
-              )}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => focusCamera && setViewMode('focus')}
-              disabled={!focusCamera}
-              title="Focus view"
-              aria-label="Focus view"
-              className={cn(
-                'flex h-8 w-8 items-center justify-center border-l border-[var(--border)] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                viewMode === 'focus'
-                  ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                  : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]',
-              )}
-            >
-              <Maximize2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {showAddCamera && (
-          <div className="shrink-0 border-b border-[var(--border)] bg-[var(--muted)]/40 px-6 py-4">
-            <CameraControls onAdded={() => setShowAddCamera(false)} />
-          </div>
-        )}
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          {isLoading ? (
-            <p className="text-sm text-[var(--muted-foreground)]">Loading cameras…</p>
-          ) : viewMode === 'focus' && focusCamera ? (
-            <div className="mx-auto max-w-4xl">
-              <CameraTile camera={focusCamera} />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+              <ViewToggleButton
+                active={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
+                icon={LayoutGrid}
+                label="Grid"
+              />
+              <ViewToggleButton
+                active={viewMode === 'focus'}
+                disabled={!focusCamera}
+                onClick={() => focusCamera && setViewMode('focus')}
+                icon={Maximize2}
+                label="Focus"
+              />
             </div>
-          ) : (
-            <CameraGrid cameras={list} />
-          )}
+            <Button size="sm" onClick={() => setAddCameraOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add camera
+            </Button>
+          </div>
         </div>
+
+        <CameraChipBar
+          cameras={list}
+          search={search}
+          onSearchChange={setSearch}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+        />
+      </section>
+
+      <Dialog open={addCameraOpen} onOpenChange={setAddCameraOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a camera</DialogTitle>
+            <DialogDescription>Start a live feed from a webcam, RTSP URL, or upload a video file.</DialogDescription>
+          </DialogHeader>
+          <CameraControls onAdded={() => setAddCameraOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading cameras…</p>
+        ) : viewMode === 'focus' && focusCamera ? (
+          <div className="mx-auto max-w-4xl">
+            <CameraTile camera={focusCamera} />
+          </div>
+        ) : (
+          <CameraGrid cameras={list} />
+        )}
       </div>
 
-      <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-[var(--border)] bg-[var(--card)] xl:flex">
-        <div className="shrink-0 border-b border-[var(--border)] p-4">
-          <SystemStatusPanel />
-        </div>
-        <div className="p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+      {/* Recent events dock */}
+      <section className="shrink-0 rounded-lg border border-border bg-card p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+            <History className="h-4 w-4 text-primary" />
             Recent events
           </h2>
-          <Timeline events={recentEvents?.events ?? []} />
+          <Link to="/events" className="label-mono flex items-center gap-1 text-primary hover:underline">
+            View all events
+            <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
-      </aside>
+        <RecentEventsStrip events={recentEvents?.events ?? []} />
+      </section>
     </div>
   )
 }
