@@ -3,8 +3,8 @@ import { Video } from 'lucide-react'
 import { LiveDot } from '@/components/LiveDot'
 import { useLiveFrame } from '@/hooks/useCamera'
 
-export function VideoFeed({ sourceId }: { sourceId: number }) {
-  const { data: frameBlob, isError } = useLiveFrame(sourceId, true)
+export function VideoFeed({ cameraId }: { cameraId: number }) {
+  const { data: frameBlob, isError } = useLiveFrame(cameraId, true)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const previousUrl = useRef<string | null>(null)
 

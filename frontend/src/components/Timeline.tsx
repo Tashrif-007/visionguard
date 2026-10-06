@@ -49,7 +49,7 @@ function EventCard({
           {event.roi_height}
         </span>
         <span className="label-mono text-muted-foreground">
-          Source #{event.source_id}
+          Camera #{event.camera_id}
           {event.frame_number !== null && ` · Frame #${event.frame_number}`}
         </span>
       </span>

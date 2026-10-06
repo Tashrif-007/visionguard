@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useActiveCameras } from "@/hooks/useCamera";
+import { useCameras } from "@/hooks/useCamera";
 import { useEventStats } from "@/hooks/useEventStats";
 import type { EventStats } from "@/types";
 
@@ -157,8 +157,8 @@ function Heatmap({ stats }: { stats: EventStats }) {
 
 export function AnalyticsPage() {
   const [rangeHours, setRangeHours] = useState<number>(24 * 7);
-  const [sourceId, setSourceId] = useState<number | undefined>(undefined);
-  const { data: cameras } = useActiveCameras();
+  const [cameraId, setCameraId] = useState<number | undefined>(undefined);
+  const { data: cameras } = useCameras();
 
   // Computed once per selection so the query key stays stable between renders.
   // Timestamps are stored as naive UTC, so send naive UTC (no trailing Z).
@@ -175,7 +175,7 @@ export function AnalyticsPage() {
     data: stats,
     isLoading,
     isError,
-  } = useEventStats({ source_id: sourceId, from_ts: fromTs });
+  } = useEventStats({ camera_id: cameraId, from_ts: fromTs });
 
   const perHour = useMemo(() => {
     const hours = Array.from({ length: 24 }, (_, h) => ({
@@ -210,9 +210,9 @@ export function AnalyticsPage() {
           </select>
           <select
             className={SELECT_CLASS}
-            value={sourceId ?? ""}
+            value={cameraId ?? ""}
             onChange={(e) =>
-              setSourceId(
+              setCameraId(
                 e.target.value === "" ? undefined : Number(e.target.value),
               )
             }

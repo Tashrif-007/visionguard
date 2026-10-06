@@ -3,8 +3,11 @@ import { useLiveFrame } from "@/hooks/useCamera";
 
 // Object URL for the latest live frame; revokes the previous URL on each
 // replacement and on unmount (same lifecycle as VideoFeed).
-export function useLiveFrameUrl(sourceId: number): string | null {
-  const { data: blob } = useLiveFrame(sourceId, true);
+export function useLiveFrameUrl(
+  cameraId: number,
+  enabled: boolean,
+): string | null {
+  const { data: blob } = useLiveFrame(cameraId, enabled);
   const [url, setUrl] = useState<string | null>(null);
   const previous = useRef<string | null>(null);
 

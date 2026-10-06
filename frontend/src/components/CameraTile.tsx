@@ -1,10 +1,10 @@
-import { X } from "lucide-react";
+import { Square } from "lucide-react";
 import { LiveDot } from "@/components/LiveDot";
 import { CameraConfigDialog } from "@/components/CameraConfigDialog";
 import { VideoFeed } from "@/components/VideoFeed";
 import { useStopCamera } from "@/hooks/useCamera";
 import { useCameraConfig } from "@/hooks/useCameraConfig";
-import type { VideoSource } from "@/types";
+import type { Camera } from "@/types";
 
 const TYPE_LABELS: Record<string, string> = {
   webcam: "Webcam",
@@ -12,13 +12,13 @@ const TYPE_LABELS: Record<string, string> = {
   upload: "Upload",
 };
 
-export function CameraTile({ camera }: { camera: VideoSource }) {
+export function CameraTile({ camera }: { camera: Camera }) {
   const stopCamera = useStopCamera();
   const { data: config } = useCameraConfig(camera.id);
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
-      <VideoFeed sourceId={camera.id} />
+      <VideoFeed cameraId={camera.id} />
 
       {/* Fixed light-on-dark colours: this overlay sits on top of video, not on a themed surface. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-10">
@@ -45,12 +45,12 @@ export function CameraTile({ camera }: { camera: VideoSource }) {
             type="button"
             onClick={() => stopCamera.mutate(camera.id)}
             disabled={stopCamera.isPending}
-            title="Remove this source"
-            aria-label="Remove camera source"
+            title="Stop this camera (it stays saved under Cameras)"
+            aria-label="Stop camera"
             className="label-mono flex h-6 items-center gap-1 rounded-sm bg-black/50 px-1.5 text-white backdrop-blur-sm transition-colors hover:bg-red-600 disabled:opacity-50"
           >
-            <X className="h-3 w-3" />
-            Remove
+            <Square className="h-3 w-3" />
+            Stop
           </button>
         </span>
       </div>
