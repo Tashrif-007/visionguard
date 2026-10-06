@@ -1,14 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import Select, case, func, select, text
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import Event, VideoSource
+from backend.db.models import Camera, Event
 
 
 def create_event(
     db: Session,
-    source_id: int,
+    camera_id: int,
     event_type: str,
     timestamp: datetime,
     image_path: str,
@@ -21,7 +21,7 @@ def create_event(
     clip_path: str | None = None,
 ) -> Event:
     event = Event(
-        source_id=source_id,
+        camera_id=camera_id,
         event_type=event_type,
         timestamp=timestamp,
         image_path=image_path,
@@ -39,20 +39,13 @@ def create_event(
     return event
 
 
-def ensure_roi_area_ratio_column(db: Session) -> None:
-    """Idempotently add events.roi_area_ratio (create_all never alters existing tables)."""
-    db.execute(text("ALTER TABLE events ADD COLUMN IF NOT EXISTS roi_area_ratio DOUBLE PRECISION"))
-    db.commit()
-
-
-def ensure_clip_path_column(db: Session) -> None:
-    """Idempotently add events.clip_path."""
-    db.execute(text("ALTER TABLE events ADD COLUMN IF NOT EXISTS clip_path TEXT"))
-    db.commit()
-
-
-def get_event_by_id(db: Session, event_id: int) -> Event | None:
-    return db.execute(select(Event).where(Event.id == event_id)).scalar_one_or_none()
+def get_event_by_id(db: Session, event_id: int, owner_id: int) -> Event | None:
+    stmt = (
+        select(Event)
+        .join(Camera, Camera.id == Event.camera_id)
+        .where(Event.id == event_id, Camera.created_by == owner_id)
+    )
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def delete_event(db: Session, event: Event) -> None:
@@ -62,19 +55,25 @@ def delete_event(db: Session, event: Event) -> None:
 
 def get_events(
     db: Session,
-    source_id: int | None = None,
+    owner_id: int,
+    camera_id: int | None = None,
     event_type: str | None = None,
     from_ts: datetime | None = None,
     to_ts: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Event], int]:
-    base = select(Event)
-    count_base = select(func.count()).select_from(Event)
+    base = select(Event).join(Camera, Camera.id == Event.camera_id).where(Camera.created_by == owner_id)
+    count_base = (
+        select(func.count())
+        .select_from(Event)
+        .join(Camera, Camera.id == Event.camera_id)
+        .where(Camera.created_by == owner_id)
+    )
 
-    if source_id is not None:
-        base = base.where(Event.source_id == source_id)
-        count_base = count_base.where(Event.source_id == source_id)
+    if camera_id is not None:
+        base = base.where(Event.camera_id == camera_id)
+        count_base = count_base.where(Event.camera_id == camera_id)
     if event_type is not None:
         base = base.where(Event.event_type == event_type)
         count_base = count_base.where(Event.event_type == event_type)
@@ -102,12 +101,14 @@ COVERAGE_BUCKETS: tuple[tuple[str, float], ...] = (
 
 def _filtered(
     stmt: Select,  # type: ignore[type-arg]
-    source_id: int | None,
+    owner_id: int,
+    camera_id: int | None,
     from_ts: datetime | None,
     to_ts: datetime | None,
 ) -> Select:  # type: ignore[type-arg]
-    if source_id is not None:
-        stmt = stmt.where(Event.source_id == source_id)
+    stmt = stmt.where(Camera.created_by == owner_id)
+    if camera_id is not None:
+        stmt = stmt.where(Event.camera_id == camera_id)
     if from_ts is not None:
         stmt = stmt.where(Event.timestamp >= from_ts)
     if to_ts is not None:
@@ -121,45 +122,74 @@ def _local_ts(timezone_name: str):  # type: ignore[no-untyped-def]
 
 
 def count_per_day(
-    db: Session, timezone_name: str, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, timezone_name: str, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> list[tuple[str, int]]:
     day = func.date(_local_ts(timezone_name))
-    stmt = _filtered(select(day, func.count()).group_by(day).order_by(day), source_id, from_ts, to_ts)
+    stmt = _filtered(
+        select(day, func.count())
+        .select_from(Event)
+        .join(Camera, Camera.id == Event.camera_id)
+        .group_by(day)
+        .order_by(day),
+        owner_id,
+        camera_id,
+        from_ts,
+        to_ts,
+    )
     return [(str(d), n) for d, n in db.execute(stmt).all()]
 
 
 def count_per_camera(
-    db: Session, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> list[tuple[int, str, int]]:
     stmt = _filtered(
-        select(VideoSource.id, VideoSource.name, func.count())
+        select(Camera.id, Camera.name, func.count())
         .select_from(Event)
-        .join(VideoSource, VideoSource.id == Event.source_id)
-        .group_by(VideoSource.id, VideoSource.name)
+        .join(Camera, Camera.id == Event.camera_id)
+        .group_by(Camera.id, Camera.name)
         .order_by(func.count().desc()),
-        source_id,
+        owner_id,
+        camera_id,
         from_ts,
         to_ts,
     )
-    return [(sid, name, n) for sid, name, n in db.execute(stmt).all()]
+    return [(cid, name, n) for cid, name, n in db.execute(stmt).all()]
 
 
 def count_heatmap(
-    db: Session, timezone_name: str, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, timezone_name: str, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> list[tuple[int, int, int]]:
     local = _local_ts(timezone_name)
     weekday = func.extract("isodow", local) - 1
     hour = func.extract("hour", local)
-    stmt = _filtered(select(weekday, hour, func.count()).group_by(weekday, hour), source_id, from_ts, to_ts)
+    stmt = _filtered(
+        select(weekday, hour, func.count())
+        .select_from(Event)
+        .join(Camera, Camera.id == Event.camera_id)
+        .group_by(weekday, hour),
+        owner_id,
+        camera_id,
+        from_ts,
+        to_ts,
+    )
     return [(int(w), int(h), n) for w, h, n in db.execute(stmt).all()]
 
 
 def count_coverage(
-    db: Session, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> list[tuple[str, int]]:
     whens = []
     for label, upper in COVERAGE_BUCKETS:
         whens.append((Event.roi_area_ratio < upper, label))
     bucket = case(*whens, else_="unknown")
-    stmt = _filtered(select(bucket, func.count()).group_by(bucket), source_id, from_ts, to_ts)
+    stmt = _filtered(
+        select(bucket, func.count())
+        .select_from(Event)
+        .join(Camera, Camera.id == Event.camera_id)
+        .group_by(bucket),
+        owner_id,
+        camera_id,
+        from_ts,
+        to_ts,
+    )
     return [(label, n) for label, n in db.execute(stmt).all()]
