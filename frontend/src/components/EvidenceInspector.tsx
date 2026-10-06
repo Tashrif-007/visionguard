@@ -50,7 +50,7 @@ function InspectorBody({ event }: { event: Event }) {
       "Timestamp",
       `${formatTimestamp(event.timestamp)} (${formatRelative(event.timestamp)})`,
     ],
-    ["Source", `#${event.source_id}`],
+    ["Camera", `#${event.camera_id}`],
     [
       "ROI",
       `x:${event.roi_x} · y:${event.roi_y} · ${event.roi_width}×${event.roi_height}`,

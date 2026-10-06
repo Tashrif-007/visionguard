@@ -6,8 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.db.database import Base, SessionLocal, engine
-from backend.db.repositories import event_repository, user_repository, video_source_repository
+from backend.db.database import SessionLocal, run_migrations
 from backend.api.routers import auth, camera, events, search, system, zones
 from backend.models.tiny_cnn import load_tiny_cnn
 from backend.services import auth_service, runtime_tuning
@@ -21,20 +20,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     runtime_tuning.configure_cpu_threads(settings.torch_num_threads, settings.cv_num_threads)
 
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables ready")
+    run_migrations()
+    logger.info("Database schema is up to date")
 
     db = SessionLocal()
     try:
-        video_source_repository.ensure_created_by_column(db)
-        event_repository.ensure_roi_area_ratio_column(db)
-        event_repository.ensure_clip_path_column(db)
-        user_repository.ensure_is_active_column(db)
-        user_repository.ensure_email_column(db)
         auth_service.seed_admin(db)
-        stale = video_source_repository.deactivate_active_sources(db)
-        if stale:
-            logger.info("Deactivated %d stale active source(s) from previous run", stale)
     finally:
         db.close()
 

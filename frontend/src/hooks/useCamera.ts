@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as cameraApi from "@/api/cameraApi";
-import type { StartCameraRequest } from "@/types";
+import type { CameraCreate, CameraUpdate } from "@/types";
 
 const CAMERAS_KEY = ["cameras"];
 const SYSTEM_STATUS_KEY = ["system", "status"];
 
-export function useActiveCameras() {
+/** Every saved camera with its live status (polled, since a file can end or a stream drop). */
+export function useCameras() {
   return useQuery({
     queryKey: CAMERAS_KEY,
     queryFn: cameraApi.listCameras,
@@ -13,43 +14,66 @@ export function useActiveCameras() {
   });
 }
 
-export function useStartCamera() {
+function useCameraMutation<TVariables, TResult>(
+  mutationFn: (variables: TVariables) => Promise<TResult>,
+) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: StartCameraRequest) => cameraApi.startCamera(request),
-    onSuccess: () => {
+    mutationFn,
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: CAMERAS_KEY });
       void queryClient.invalidateQueries({ queryKey: SYSTEM_STATUS_KEY });
     },
   });
+}
+
+export function useRegisterCamera() {
+  return useCameraMutation((request: CameraCreate) =>
+    cameraApi.registerCamera(request),
+  );
+}
+
+/** Register a new camera and start it straight away (the dashboard's quick add). */
+export function useAddAndStartCamera() {
+  return useCameraMutation(async (request: CameraCreate) => {
+    const camera = await cameraApi.registerCamera(request);
+    return cameraApi.startCamera(camera.id);
+  });
+}
+
+export function useUpdateCamera() {
+  return useCameraMutation(
+    ({ cameraId, request }: { cameraId: number; request: CameraUpdate }) =>
+      cameraApi.updateCamera(cameraId, request),
+  );
+}
+
+export function useDeleteCamera() {
+  return useCameraMutation((cameraId: number) =>
+    cameraApi.deleteCamera(cameraId),
+  );
+}
+
+export function useStartCamera() {
+  return useCameraMutation((cameraId: number) =>
+    cameraApi.startCamera(cameraId),
+  );
 }
 
 export function useStopCamera() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (sourceId: number) => cameraApi.stopCamera(sourceId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CAMERAS_KEY });
-      void queryClient.invalidateQueries({ queryKey: SYSTEM_STATUS_KEY });
-    },
-  });
+  return useCameraMutation((cameraId: number) =>
+    cameraApi.stopCamera(cameraId),
+  );
 }
 
 export function useUploadVideo() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (file: File) => cameraApi.uploadVideo(file),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CAMERAS_KEY });
-      void queryClient.invalidateQueries({ queryKey: SYSTEM_STATUS_KEY });
-    },
-  });
+  return useCameraMutation((file: File) => cameraApi.uploadVideo(file));
 }
 
-export function useLiveFrame(sourceId: number, enabled: boolean) {
+export function useLiveFrame(cameraId: number, enabled: boolean) {
   return useQuery({
-    queryKey: ["frame", sourceId],
-    queryFn: () => cameraApi.fetchFrame(sourceId),
+    queryKey: ["frame", cameraId],
+    queryFn: () => cameraApi.fetchFrame(cameraId),
     enabled,
     refetchInterval: 120,
     staleTime: 0,

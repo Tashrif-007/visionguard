@@ -13,9 +13,9 @@ const toInput = (time: string): string => time.slice(0, 5); // "HH:MM:SS" -> "HH
 const toApi = (time: string): string =>
   time.length === 5 ? `${time}:00` : time;
 
-export function ScheduleEditor({ sourceId }: { sourceId: number }) {
-  const { data: config } = useCameraConfig(sourceId);
-  const saveSchedule = useSaveSchedule(sourceId);
+export function ScheduleEditor({ cameraId }: { cameraId: number }) {
+  const { data: config } = useCameraConfig(cameraId);
+  const saveSchedule = useSaveSchedule(cameraId);
 
   const [enabled, setEnabled] = useState(false);
   const [weekdays, setWeekdays] = useState<number[]>(ALL_DAYS);

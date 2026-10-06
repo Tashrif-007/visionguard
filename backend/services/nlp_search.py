@@ -1,8 +1,8 @@
 import logging
+import time
 from datetime import datetime, timezone
-from functools import lru_cache
 
-import anthropic
+import httpx
 from pydantic import BaseModel, ValidationError
 
 from backend.config import settings
@@ -36,12 +36,64 @@ class _LLMFilters(BaseModel):
     event_type: str | None = None
 
 
-@lru_cache(maxsize=1)
-def _client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(
-        api_key=settings.anthropic_api_key,
-        timeout=settings.anthropic_timeout_seconds,
-        max_retries=1,
+def _response_format() -> dict[str, object]:
+    """OpenAI-style structured-output spec so the model must reply with _LLMFilters JSON.
+
+    Written by hand rather than from model_json_schema(): strict mode rejects the
+    "default"/"title" keywords Pydantic emits and needs every field listed as required.
+    """
+    nullable_string = {"type": ["string", "null"]}
+    fields = list(_LLMFilters.model_fields)
+    schema = {
+        "type": "object",
+        "properties": {name: nullable_string for name in fields},
+        "required": fields,
+        "additionalProperties": False,
+    }
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": "event_filters", "strict": True, "schema": schema},
+    }
+
+
+def _is_retryable(response: httpx.Response) -> bool:
+    # Free OpenRouter models are rate-limited upstream in bursts (429); 5xx is a provider hiccup.
+    return response.status_code == 429 or response.status_code >= 500
+
+
+def _request_filters(q: str, system_prompt: str) -> _LLMFilters:
+    """Call OpenRouter's chat completions endpoint and validate the JSON reply.
+
+    Retries rate-limited / provider-error responses up to OPENROUTER_MAX_RETRIES
+    times, waiting OPENROUTER_RETRY_BACKOFF_SECONDS × attempt between tries.
+    """
+    for attempt in range(settings.openrouter_max_retries + 1):
+        response = _post_completion(q, system_prompt)
+        if not _is_retryable(response) or attempt == settings.openrouter_max_retries:
+            break
+        logger.warning("OpenRouter returned %s; retrying (attempt %d)", response.status_code, attempt + 1)
+        time.sleep(settings.openrouter_retry_backoff_seconds * (attempt + 1))
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+    return _LLMFilters.model_validate_json(content)
+
+
+def _post_completion(q: str, system_prompt: str) -> httpx.Response:
+    return httpx.post(
+        f"{settings.openrouter_base_url}/chat/completions",
+        headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
+        json={
+            "model": settings.openrouter_model,
+            "max_tokens": settings.openrouter_max_tokens,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": q},
+            ],
+            "response_format": _response_format(),
+            # Only route to providers that honour response_format, so the reply is real JSON.
+            "provider": {"require_parameters": True},
+        },
+        timeout=settings.openrouter_timeout_seconds,
     )
 
 
@@ -49,21 +101,26 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
-        logger.warning("Claude returned an unparseable timestamp %r; ignoring it", value)
+        logger.warning("LLM returned an unparseable timestamp %r; ignoring it", value)
         return None
+    # events.timestamp is naive UTC; an aware value (e.g. a trailing "Z") would be shifted
+    # by the DB session timezone when compared, so normalise to naive UTC here.
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def parse_query(q: str, now: datetime | None = None) -> ParsedFilters:
-    """Parse a natural-language event query into structured filters via the Claude API.
+    """Parse a natural-language event query into structured filters via an LLM on OpenRouter.
 
     Never raises — any failure (missing key, network, bad output) degrades to
     ParsedFilters() (no filters, i.e. "return all events"), per CLAUDE.md's rule
     that an unparseable query should widen the search rather than error out.
     """
-    if not settings.anthropic_api_key:
-        logger.warning("ANTHROPIC_API_KEY not configured; returning unfiltered search results")
+    if not settings.openrouter_api_key:
+        logger.warning("OPENROUTER_API_KEY not configured; returning unfiltered search results")
         return ParsedFilters()
 
     current_time = now or datetime.now(timezone.utc)
@@ -72,16 +129,9 @@ def parse_query(q: str, now: datetime | None = None) -> ParsedFilters:
     )
 
     try:
-        response = _client().messages.parse(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": q}],
-            output_format=_LLMFilters,
-        )
-        filters = response.parsed_output
-    except (anthropic.APIError, anthropic.APIConnectionError, ValidationError, ValueError):
-        logger.exception("Claude API query parsing failed; returning unfiltered search results")
+        filters = _request_filters(q, system_prompt)
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError):
+        logger.exception("OpenRouter query parsing failed; returning unfiltered search results")
         return ParsedFilters()
 
     return ParsedFilters(

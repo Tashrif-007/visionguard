@@ -2,7 +2,7 @@ import client from "@/api/client";
 import type { EventListResponse, EventStats, SearchResponse } from "@/types";
 
 export interface ListEventsParams {
-  source_id?: number;
+  camera_id?: number;
   event_type?: string;
   from_ts?: string;
   to_ts?: string;
@@ -42,7 +42,7 @@ export const fetchClip = async (eventId: number): Promise<Blob> =>
     .data;
 
 export interface EventStatsParams {
-  source_id?: number;
+  camera_id?: number;
   from_ts?: string;
   to_ts?: string;
 }

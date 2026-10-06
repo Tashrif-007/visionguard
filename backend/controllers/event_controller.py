@@ -9,30 +9,31 @@ from backend.services import event_service
 from backend.services.event_service import EventNotFoundError
 
 
-def get_event_snapshot(db: Session, event_id: int) -> bytes:
+def get_event_snapshot(db: Session, event_id: int, owner_id: int) -> bytes:
     try:
-        return event_service.get_event_snapshot(db, event_id)
+        return event_service.get_event_snapshot(db, event_id, owner_id)
     except EventNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-def get_event_clip_path(db: Session, event_id: int) -> Path:
+def get_event_clip_path(db: Session, event_id: int, owner_id: int) -> Path:
     try:
-        return event_service.get_event_clip_path(db, event_id)
+        return event_service.get_event_clip_path(db, event_id, owner_id)
     except EventNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-def delete_event(db: Session, event_id: int) -> None:
+def delete_event(db: Session, event_id: int, owner_id: int) -> None:
     try:
-        event_service.delete_event(db, event_id)
+        event_service.delete_event(db, event_id, owner_id)
     except EventNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 def get_events(
     db: Session,
-    source_id: int | None,
+    owner_id: int,
+    camera_id: int | None,
     event_type: str | None,
     from_ts: datetime | None,
     to_ts: datetime | None,
@@ -41,7 +42,8 @@ def get_events(
 ) -> EventListResponse:
     return event_service.list_events(
         db=db,
-        source_id=source_id,
+        owner_id=owner_id,
+        camera_id=camera_id,
         event_type=event_type,
         from_ts=from_ts,
         to_ts=to_ts,
@@ -51,6 +53,6 @@ def get_events(
 
 
 def get_event_stats(
-    db: Session, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> EventStatsResponse:
-    return event_service.get_event_stats(db, source_id, from_ts, to_ts)
+    return event_service.get_event_stats(db, owner_id, camera_id, from_ts, to_ts)

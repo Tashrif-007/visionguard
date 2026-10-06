@@ -29,10 +29,13 @@ class Settings(BaseSettings):
     dehaze_t_min: float = 0.1
     dehaze_gamma: float = 0.85
     refine_max_side: int = 256
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-opus-5"
-    anthropic_max_tokens: int = 2048
-    anthropic_timeout_seconds: float = 15.0
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "qwen/qwen3.8-27b:free"
+    openrouter_max_tokens: int = 512
+    openrouter_timeout_seconds: float = 15.0
+    openrouter_max_retries: int = 2
+    openrouter_retry_backoff_seconds: float = 1.0
 
     jwt_secret_key: str = "dev-insecure-change-me"
     jwt_algorithm: str = "HS256"

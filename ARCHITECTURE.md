@@ -18,7 +18,7 @@ flowchart LR
         S --> Pool[CapturePool]
         Pool --> M1[CaptureManager per source]
         M1 --> Pipe[pipeline.dehaze_roi + Tiny CNN]
-        S --> Claude[(Claude API)]
+        S --> LLM[(OpenRouter LLM)]
     end
     API -- "JWT bearer / JSON / JPEG" --> R
     M1 -- "snapshots/*.jpg" --> Disk[(disk)]
@@ -28,7 +28,7 @@ flowchart LR
 |---|---|
 | Backend | Python 3.11+, FastAPI, SQLAlchemy 2 + psycopg2, PyJWT + passlib/bcrypt, pydantic-settings |
 | CV / ML | OpenCV, NumPy, PyTorch (CPU only) |
-| NLP search | Claude API (Anthropic SDK), only to parse a query into filters |
+| NLP search | LLM via OpenRouter (httpx, JSON-schema output), only to parse a query into filters |
 | Database | PostgreSQL only (credentials as separate `POSTGRES_*` vars) |
 | Frontend | React 19, TypeScript (strict), Vite, Tailwind v4, shadcn-style primitives, TanStack Query, Axios, react-router |
 
@@ -129,17 +129,17 @@ backend/
 │   └── runtime_tuning.py   caps torch/cv2 thread counts
 ├── models/tiny_cnn.py      nn.Module + loader (returns None if weights missing)
 ├── schemas/                Pydantic request/response models
-└── db/                     database.py, models.py, repositories/{event,user,video_source}_repository.py
+└── db/                     database.py, models.py, migrations/ (Alembic), repositories/{camera,event,user,zone}_repository.py
 ```
 
 ### 3.2 Capture runtime
 
 ```mermaid
 flowchart TD
-    API[POST /start-camera or /upload-video] --> CS[camera_service] --> Pool[CapturePool.start source_id]
+    API[POST /cameras/id/start or /upload-video] --> CS[camera_service] --> Pool[CapturePool.start camera_id]
     Pool --> CM[CaptureManager thread]
     CM -->|live source| Rd[_LatestFrameReader thread: keeps only the newest frame, bounds lag]
-    CM -->|file source| Pace[monotonic-deadline pacing at native FPS, grab-based catch-up, deactivate on EOF]
+    CM -->|file source| Pace[monotonic-deadline pacing at native FPS, grab-based catch-up, status ended on EOF]
     Rd --> PF[_process_frame]
     Pace --> PF
     PF --> Mot[motion mask → ROI]
@@ -147,13 +147,13 @@ flowchart TD
     Dh --> Ev[ThreadPoolExecutor: write snapshot JPEG + INSERT event]
     PF --> Prev[throttled preview JPEG: PREVIEW_FPS, PREVIEW_MAX_WIDTH, quality]
     Prev --> Buf[(lock-protected latest JPEG)]
-    Buf --> F[GET /frame/source_id]
+    Buf --> F[GET /cameras/camera_id/frame]
 ```
 
-- One thread, one motion detector and one frame buffer per source. Sources start and stop independently.
+- One thread, one motion detector and one frame buffer per camera. Cameras start and stop independently.
 - Snapshot I/O and DB writes run off the capture thread, on a copy of the frame taken before the ROI rectangle is drawn.
-- At startup, any rows still marked active (from a crashed run) are deactivated.
-- A source that can't be opened rolls back its activation and returns 400.
+- Running state is never stored in the database. `CapturePool.status(camera_id)` reports `running`, `stopped`, `ended` (file finished), `offline` (live stream stopped delivering frames) or `error` (capture loop crashed), so a restart can't leave stale "active" rows.
+- A camera that can't be opened stays `stopped` and the start call returns 400. An uploaded file that isn't a playable video is removed together with its camera.
 
 ### 3.3 Authentication and authorisation
 
@@ -168,9 +168,14 @@ POST /auth/login {email, password} → authenticate() (timing-safe, dummy hash w
 - **Safety rules in `set_user_active`:** you can't deactivate yourself, and you can't deactivate the last active admin.
 - Duplicate emails raise `UserAlreadyExistsError`.
 
-### 3.4 Startup migrations
+### 3.4 Schema migrations (Alembic)
 
-`Base.metadata.create_all` can't add columns to existing tables, so the lifespan runs idempotent SQL in the repositories: `ensure_created_by_column` (`video_sources.created_by`), `ensure_is_active_column`, and `ensure_email_column` (renames `username` to `name` and backfills `email`).
+Schema changes are Alembic migrations in `backend/db/migrations/versions/`; `alembic.ini` sits at the repo root and takes the DB URL from `config.py`. The lifespan calls `run_migrations()` (`alembic upgrade head`) before seeding the admin, so a plain `uvicorn` start always brings the schema up to date.
+
+- `0001_baseline` — the schema as it was before Alembic. On an empty database it creates every table; on a database built by the old `create_all()` + `ensure_*_column()` code it only adds the columns those helpers used to add.
+- `0002_camera_registry` — replaces per-start `video_sources` rows with one `cameras` row per source URI and re-points events, zones and schedules to `camera_id` (the newest zones/schedule per URI win). Its `downgrade()` recreates `video_sources` from `cameras`.
+
+New change: edit `models.py`, run `alembic revision --autogenerate -m "..."`, review the generated file (add any data moves by hand), then `alembic upgrade head`. `alembic check` confirms models and database agree.
 
 ---
 
@@ -178,8 +183,10 @@ POST /auth/login {email, password} → authenticate() (timing-safe, dummy hash w
 
 ```mermaid
 erDiagram
-    users ||--o{ video_sources : "created_by (nullable)"
-    video_sources ||--o{ events : "source_id"
+    users ||--o{ cameras : "created_by (nullable)"
+    cameras ||--o{ events : "camera_id"
+    cameras ||--o{ camera_zones : "camera_id"
+    cameras ||--o| camera_schedules : "camera_id (unique)"
     users {
         int id PK
         string name "64"
@@ -189,31 +196,49 @@ erDiagram
         bool is_active "default true"
         datetime created_at
     }
-    video_sources {
+    cameras {
         int id PK
-        string name
-        string source_type "webcam | ip | file …"
-        text source_uri "device index, URL or upload path"
-        bool is_active "default false"
+        string name "255"
+        string source_type "webcam | ip_camera | upload"
+        text source_uri UK "device index, URL or upload path"
         int created_by FK "nullable → users.id"
         datetime created_at
+        datetime deleted_at "nullable — soft delete keeps events"
     }
     events {
         int id PK
-        int source_id FK
+        int camera_id FK
         string event_type "30, currently 'motion'"
-        datetime timestamp
+        datetime timestamp "naive UTC"
         text image_path "snapshot file"
         int roi_x
         int roi_y
         int roi_width
         int roi_height
+        float roi_area_ratio "nullable"
+        text clip_path "nullable, WebM"
         int frame_number "nullable"
         datetime created_at
     }
+    camera_zones {
+        int id PK
+        int camera_id FK "indexed"
+        string name "64"
+        string mode "include | exclude"
+        json points "normalised [x, y] in 0..1"
+        datetime created_at
+    }
+    camera_schedules {
+        int id PK
+        int camera_id FK "unique"
+        bool enabled
+        json weekdays "0=Mon .. 6=Sun"
+        time start_time
+        time end_time
+    }
 ```
 
-**Indexes on `events`:** `(source_id, timestamp)` and `(event_type, timestamp)`, matching the timeline and filter queries. `users.email` is unique and indexed.
+**Indexes on `events`:** `(camera_id, timestamp)` and `(event_type, timestamp)`, matching the timeline and filter queries. `users.email` is unique and indexed.
 
 All DB access goes through the repositories in `backend/db/repositories/`. Snapshot images are files in `SNAPSHOT_DIR`, and `events.image_path` points to them. Clients read them through `GET /events/{id}/snapshot`, not a public static mount.
 
@@ -239,17 +264,20 @@ All routes require `Authorization: Bearer <jwt>` except `POST /auth/login`. Inte
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/cameras` | List currently active sources |
-| POST | `/start-camera` | `{name?, source_uri?}` — start a live/IP/webcam feed as a new active source (400 if it can't be opened) |
-| POST | `/upload-video` | Multipart file — save to `UPLOAD_DIR` and start it as a source |
-| POST | `/stop-camera/{source_id}` | Stop one feed |
-| GET | `/frame/{source_id}` | Latest processed frame (`image/jpeg`) |
+| GET | `/cameras` | Saved cameras, each with a live `status` |
+| POST | `/cameras` | `{name?, source_uri?}` — register a camera (201; 409 if another camera uses the URI; a deleted camera with that URI is restored) |
+| PATCH | `/cameras/{camera_id}` | `{name?, source_uri?}` — rename or change source (409 if changing the source while running) |
+| DELETE | `/cameras/{camera_id}` | Stop and soft-delete (204); events stay |
+| POST | `/cameras/{camera_id}/start` | Start capture (400 if it can't be opened, 409 if already running) |
+| POST | `/cameras/{camera_id}/stop` | Stop capture |
+| POST | `/upload-video` | Multipart file — save to `UPLOAD_DIR`, register as an `upload` camera and start it |
+| GET | `/cameras/{camera_id}/frame` | Latest processed frame (`image/jpeg`) |
 
 ### Events
 
 | Method | Path | Access | Description |
 |---|---|---|---|
-| GET | `/events` | any user | Query: `source_id`, `event_type`, `from_ts`, `to_ts`, `limit` (1–200), `offset` → `{events, total}` |
+| GET | `/events` | any user | Query: `camera_id`, `event_type`, `from_ts`, `to_ts`, `limit` (1–200), `offset` → `{events, total}` |
 | GET | `/events/search?q=` | any user | Natural-language search → `{query, parsed_filters, events, total}` |
 | GET | `/events/{id}/snapshot` | any user | Snapshot JPEG |
 | DELETE | `/events/{id}` | admin | Delete an event (204) |
@@ -301,9 +329,9 @@ Protected pages render inside `AppLayout` (top bar, user menu, theme toggle, toa
 | `useLogin` / `useLogout` | `useAuth.ts` | `POST /auth/login` | Store or clear the token and reset the cache |
 | `useChangePassword`, `useUpdateProfile` | `useAuth.ts` | `PATCH /auth/password`, `/auth/profile` | |
 | `useCreateUser`, `useUsers`, `useSetUserStatus` | `useAuth.ts` | `/auth/users…` | Admin only |
-| `useActiveCameras` | `useCamera.ts` | `GET /cameras` | Polls every 4 s, so the grid follows server state and survives refresh |
-| `useStartCamera`, `useStopCamera`, `useUploadVideo` | `useCamera.ts` | camera mutations | Invalidate the camera list |
-| `useLiveFrame(sourceId, enabled)` | `useCamera.ts` | `GET /frame/{id}` | Polls every 120 ms for the live view |
+| `useCameras` | `useCamera.ts` | `GET /cameras` | Polls every 4 s; the dashboard shows the `running` ones, the Cameras page all of them |
+| `useRegisterCamera`, `useAddAndStartCamera`, `useUpdateCamera`, `useDeleteCamera`, `useStartCamera`, `useStopCamera`, `useUploadVideo` | `useCamera.ts` | camera mutations | Invalidate the camera list |
+| `useLiveFrame(cameraId, enabled)` | `useCamera.ts` | `GET /cameras/{id}/frame` | Polls every 120 ms for the live view |
 | `useEvents(params)` | `useEvents.ts` | `GET /events` | Filters and pagination |
 | `useDeleteEvent` | `useEvents.ts` | `DELETE /events/{id}` | |
 | `useEventSnapshot(eventId)` | `useEvents.ts` | `GET /events/{id}/snapshot` | `staleTime: Infinity`, because a stored image never changes |
@@ -331,7 +359,7 @@ All values come from `.env` through `backend/config.py`. See `.env.example`.
 | Dehazing | `DCP_PATCH_SIZE`, `ATMO_TOP_K_RATIO`, `ATMO_MIN_PIXELS`, `DEHAZE_OMEGA`, `DEHAZE_T_MIN`, `DEHAZE_GAMMA`, `DEHAZE_MAX_SIDE`, `REFINE_MAX_SIDE`, `GUIDED_FILTER_RADIUS`, `GUIDED_FILTER_EPS` |
 | Streaming | `PREVIEW_FPS`, `PREVIEW_MAX_WIDTH`, `PREVIEW_JPEG_QUALITY`, `CAPTURE_MAX_LAG_FRAMES` |
 | CPU | `TORCH_NUM_THREADS`, `CV_NUM_THREADS` |
-| NLP | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TIMEOUT_SECONDS` |
+| NLP | `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_MAX_TOKENS`, `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`, `OPENROUTER_RETRY_BACKOFF_SECONDS` |
 
 ---
 

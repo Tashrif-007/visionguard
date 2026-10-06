@@ -90,8 +90,13 @@ class Api:
         response.raise_for_status()
         return int(response.json()["id"])
 
-    def events(self, source_id: int, **params) -> dict:  # type: ignore[no-untyped-def,type-arg]
-        return self.request("GET", "/events", params={"source_id": source_id, "limit": 200, **params}).json()
+    def register(self, name: str, source_uri: str) -> int:
+        response = self.request("POST", "/cameras", json={"name": name, "source_uri": source_uri})
+        response.raise_for_status()
+        return int(response.json()["id"])
+
+    def events(self, camera_id: int, **params) -> dict:  # type: ignore[no-untyped-def,type-arg]
+        return self.request("GET", "/events", params={"camera_id": camera_id, "limit": 200, **params}).json()
 
 
 def main() -> None:
@@ -155,8 +160,13 @@ def main() -> None:
     record("TC-11", "Admin cannot deactivate own account", "Rejected (4xx)", f"{r.status_code}", 400 <= r.status_code < 500)
 
     # --------------------------------------------------------------- cameras
-    r = api.request("POST", "/start-camera", json={"name": "bad", "source_uri": "/nonexistent/video.mp4"})
-    record("TC-12", "Start a camera with an unreachable source", "400 with a clear message, source not left active", f"{r.status_code}: {r.json().get('detail')}", r.status_code == 400)
+    bad_cam = api.register("bad", f"/nonexistent/video_{suffix}.mp4")
+    r = api.request("POST", f"/cameras/{bad_cam}/start")
+    bad_status = next(c["status"] for c in api.request("GET", "/cameras").json() if c["id"] == bad_cam)
+    record("TC-12", "Start a camera with an unreachable source", "400 with a clear message, camera stays stopped", f"{r.status_code}: {r.json().get('detail')}; status={bad_status}", r.status_code == 400 and bad_status == "stopped")
+
+    r = api.request("POST", "/cameras", json={"name": "bad twin", "source_uri": f"/nonexistent/video_{suffix}.mp4"})
+    record("TC-38", "Register a second camera with the same source URI", "409, no duplicate camera", f"{r.status_code}: {r.json().get('detail')}", r.status_code == 409)
 
     bad_file = work / "notes.txt"
     bad_file.write_text("this is not a video")
@@ -164,8 +174,8 @@ def main() -> None:
         r = api.request("POST", "/upload-video", files={"file": ("notes.txt", handle, "text/plain")})
     record("TC-13", "Upload a non-video file", "400 validation error", f"{r.status_code}", r.status_code == 400)
 
-    r = api.request("POST", "/stop-camera/999999")
-    record("TC-14", "Stop a camera that is not active", "404, no unhandled error", f"{r.status_code}", r.status_code == 404)
+    r = api.request("POST", "/cameras/999999/stop")
+    record("TC-14", "Stop a camera that does not exist", "404, no unhandled error", f"{r.status_code}", r.status_code == 404)
 
     # synthetic scenarios: all started together so they run in parallel
     videos = {}
@@ -188,8 +198,8 @@ def main() -> None:
     api.request("PUT", f"/cameras/{src_include_hit}/zones", json=[{"name": "right", "mode": "include", "points": right_half}])
     r_sched = api.request("PUT", f"/cameras/{src_disarmed}/schedule", json={"enabled": True, "weekdays": [0, 1, 2, 3, 4, 5, 6], "start_time": "03:00:00", "end_time": "03:01:00"})
 
-    frame = api.request("GET", f"/frame/{src_base}")
-    record("TC-15", "Upload a valid video and fetch a processed frame", "Upload 200; /frame returns a JPEG", f"/frame={frame.status_code} {frame.headers.get('content-type')} {len(frame.content)} bytes", frame.status_code == 200 and frame.headers.get("content-type") == "image/jpeg")
+    frame = api.request("GET", f"/cameras/{src_base}/frame")
+    record("TC-15", "Upload a valid video and fetch a processed frame", "Upload 201; /cameras/{id}/frame returns a JPEG", f"frame={frame.status_code} {frame.headers.get('content-type')} {len(frame.content)} bytes", frame.status_code == 200 and frame.headers.get("content-type") == "image/jpeg")
 
     time.sleep(26)
 
@@ -238,13 +248,20 @@ def main() -> None:
     file_uri = str(Path("uploads") / f"qa_inherit_{suffix}.mp4")
     Path("uploads").mkdir(exist_ok=True)
     Path(file_uri).write_bytes(videos["static"].read_bytes())
-    first = api.request("POST", "/start-camera", json={"name": "inherit-1", "source_uri": file_uri}).json()
-    api.request("PUT", f"/cameras/{first['id']}/zones", json=[{"name": "keep me", "mode": "exclude", "points": right_half}])
-    api.request("POST", f"/stop-camera/{first['id']}")
-    second = api.request("POST", "/start-camera", json={"name": "inherit-2", "source_uri": file_uri}).json()
-    inherited = api.request("GET", f"/cameras/{second['id']}/config").json()
-    record("TC-28", "Re-adding a camera with the same URI keeps its zones", "New source has the 'keep me' zone", f"zones={[z['name'] for z in inherited['zones']]}", [z["name"] for z in inherited["zones"]] == ["keep me"])
-    api.request("POST", f"/stop-camera/{second['id']}")
+    saved_cam = api.register("saved camera", file_uri)
+    api.request("PUT", f"/cameras/{saved_cam}/zones", json=[{"name": "keep me", "mode": "exclude", "points": right_half}])
+    api.request("POST", f"/cameras/{saved_cam}/start")
+    api.request("POST", f"/cameras/{saved_cam}/stop")
+    restarted = api.request("POST", f"/cameras/{saved_cam}/start")
+    kept = api.request("GET", f"/cameras/{saved_cam}/config").json()
+    record("TC-28", "Restarting a saved camera keeps its zones", "Same camera id, still has the 'keep me' zone", f"start={restarted.status_code}, zones={[z['name'] for z in kept['zones']]}", restarted.status_code == 200 and [z["name"] for z in kept["zones"]] == ["keep me"])
+    api.request("POST", f"/cameras/{saved_cam}/stop")
+
+    deleted = api.request("DELETE", f"/cameras/{saved_cam}")
+    hidden = all(c["id"] != saved_cam for c in api.request("GET", "/cameras").json())
+    restored = api.request("POST", "/cameras", json={"name": "saved camera again", "source_uri": file_uri}).json()
+    restored_zones = [z["name"] for z in api.request("GET", f"/cameras/{restored['id']}/config").json()["zones"]]
+    record("TC-39", "Delete a camera, then register its source again", "204 and hidden from the list; re-registering restores the same id and zones", f"delete={deleted.status_code}, hidden={hidden}, id={restored['id']}, zones={restored_zones}", deleted.status_code == 204 and hidden and restored["id"] == saved_cam and restored_zones == ["keep me"])
 
     # ----------------------------------------------------- events, clips, stats
     first_event = events[0] if events else None
@@ -256,15 +273,55 @@ def main() -> None:
     r = api.request("GET", "/events/99999999/snapshot")
     record("TC-31", "Snapshot of an unknown event", "404", f"{r.status_code}", r.status_code == 404)
 
-    page1 = api.request("GET", "/events", params={"source_id": src_base, "limit": 1, "offset": 0}).json()
+    page1 = api.request("GET", "/events", params={"camera_id": src_base, "limit": 1, "offset": 0}).json()
     record("TC-32", "Timeline pagination and filtering", "limit=1 returns 1 event; total unchanged", f"returned={len(page1['events'])}, total={page1['total']}", len(page1["events"]) == 1 and page1["total"] == base["total"])
 
-    r = api.request("GET", "/events", params={"source_id": src_base, "from_ts": "2999-01-01T00:00:00"}).json()
+    r = api.request("GET", "/events", params={"camera_id": src_base, "from_ts": "2999-01-01T00:00:00"}).json()
     record("TC-33", "Time filter in the future returns nothing", "0 events", f"{r['total']}", r["total"] == 0)
 
     stats = api.request("GET", "/events/stats").json()
     total_ok = stats["total"] == sum(d["count"] for d in stats["per_day"]) == sum(c["count"] for c in stats["per_camera"]) == sum(c["count"] for c in stats["coverage"]) == sum(c["count"] for c in stats["heatmap"])
     record("TC-34", "Analytics totals are internally consistent", "total equals per-day, per-camera, heatmap and coverage sums", f"total={stats['total']}", total_ok)
+
+    # ------------------------------------------------- per-user isolation
+    twin_login = api.login(f"qa.twin.{suffix}@example.com", qa_password)
+    twin_token = twin_login.json().get("access_token", "") if twin_login.status_code == 200 else ""
+    twin_cameras = api.request("GET", "/cameras", token=twin_token).json()
+    record("TC-40", "A new user starts with no cameras", "Empty camera list (admin's cameras are not visible)", f"{len(twin_cameras)} cameras", twin_cameras == [])
+
+    foreign = {
+        "start": api.request("POST", f"/cameras/{src_base}/start", token=twin_token).status_code,
+        "stop": api.request("POST", f"/cameras/{src_base}/stop", token=twin_token).status_code,
+        "rename": api.request("PATCH", f"/cameras/{src_base}", token=twin_token, json={"name": "hijacked"}).status_code,
+        "frame": api.request("GET", f"/cameras/{src_base}/frame", token=twin_token).status_code,
+        "config": api.request("GET", f"/cameras/{src_base}/config", token=twin_token).status_code,
+        "zones": api.request("PUT", f"/cameras/{src_base}/zones", token=twin_token, json=[]).status_code,
+        "schedule": api.request("PUT", f"/cameras/{src_base}/schedule", token=twin_token, json={"enabled": False, "weekdays": [0], "start_time": "08:00:00", "end_time": "09:00:00"}).status_code,
+        "delete": api.request("DELETE", f"/cameras/{src_base}", token=twin_token).status_code,
+    }
+    still_running = next(c["status"] for c in api.request("GET", "/cameras").json() if c["id"] == src_base)
+    record("TC-41", "Another user cannot touch someone else's camera", "404 on start/stop/rename/frame/config/zones/schedule/delete; camera unaffected", f"{foreign}; owner still sees status={still_running}", all(code == 404 for code in foreign.values()) and still_running != "stopped")
+
+    twin_events = api.request("GET", "/events", token=twin_token, params={"limit": 200}).json()
+    twin_by_camera = api.request("GET", "/events", token=twin_token, params={"camera_id": src_base}).json()
+    twin_stats = api.request("GET", "/events/stats", token=twin_token).json()
+    twin_search = api.request("GET", "/events/search", token=twin_token, params={"q": "any motion"}).json()
+    leaks = twin_events["total"] + twin_by_camera["total"] + twin_stats["total"] + twin_search["total"]
+    record("TC-42", "Another user sees none of the events", "0 events in the timeline, camera filter, stats and search", f"timeline={twin_events['total']}, camera filter={twin_by_camera['total']}, stats={twin_stats['total']}, search={twin_search['total']}", leaks == 0)
+
+    if first_event is not None:
+        snap_other = api.request("GET", f"/events/{first_event['id']}/snapshot", token=twin_token).status_code
+        clip_other = api.request("GET", f"/events/{first_event['id']}/clip", token=twin_token).status_code
+        record("TC-43", "Another user cannot fetch an event's snapshot or clip", "404 for both", f"snapshot={snap_other}, clip={clip_other}", snap_other == 404 and clip_other == 404)
+
+    twin_own = api.request("POST", "/cameras", token=twin_token, json={"name": "twin copy", "source_uri": file_uri})
+    twin_own_id = twin_own.json().get("id") if twin_own.status_code == 201 else None
+    same_uri_ok = twin_own_id is not None and twin_own_id != restored["id"]
+    twin_list = api.request("GET", "/cameras", token=twin_token).json()
+    admin_ids = [c["id"] for c in api.request("GET", "/cameras").json()]
+    record("TC-44", "Two users can register the same source URI independently", "201 with a new id; each user sees only their own camera", f"status={twin_own.status_code}, twin ids={[c['id'] for c in twin_list]}, shares id with admin={twin_own_id in admin_ids}", same_uri_ok and [c["id"] for c in twin_list] == [twin_own_id] and twin_own_id not in admin_ids)
+    if twin_own_id is not None:
+        api.request("DELETE", f"/cameras/{twin_own_id}", token=twin_token)
 
     search = api.request("GET", "/events/search", params={"q": "any motion last night?"})
     body = search.json() if search.status_code == 200 else {}
@@ -287,8 +344,9 @@ def main() -> None:
         record("TC-37", "Admin deletes an event and its files", "204; snapshot file removed", f"{r.status_code}, existed={existed}, removed={gone}", r.status_code == 204 and existed and gone)
 
     # ---------------------------------------------------------------- cleanup
-    for source_id in (src_static, src_flicker, src_base, src_exclude, src_include_elsewhere, src_include_hit, src_disarmed):
-        api.request("POST", f"/stop-camera/{source_id}")
+    # Deleting is a soft delete: the cameras' events stay, but the registry isn't cluttered.
+    for camera_id in (src_static, src_flicker, src_base, src_exclude, src_include_elsewhere, src_include_hit, src_disarmed, bad_cam, saved_cam):
+        api.request("DELETE", f"/cameras/{camera_id}")
     for account_id in (qa_id, twin_id):
         if account_id is not None:
             api.request("PATCH", f"/auth/users/{account_id}/status", json={"is_active": False})

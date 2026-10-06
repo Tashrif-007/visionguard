@@ -9,7 +9,7 @@ import { CameraGrid } from '@/components/CameraGrid'
 import { CameraTile } from '@/components/CameraTile'
 import { LiveDot } from '@/components/LiveDot'
 import { RecentEventsStrip } from '@/components/RecentEventsStrip'
-import { useActiveCameras } from '@/hooks/useCamera'
+import { useCameras } from '@/hooks/useCamera'
 import { useEvents } from '@/hooks/useEvents'
 import { cn } from 'cn'
 
@@ -55,10 +55,10 @@ export function Dashboard() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
-  const { data: cameras, isLoading } = useActiveCameras()
+  const { data: cameras, isLoading } = useCameras()
   const { data: recentEvents } = useEvents({ limit: 10 })
 
-  const list = cameras ?? []
+  const list = useMemo(() => (cameras ?? []).filter((c) => c.status === 'running'), [cameras])
   const focusCamera = useMemo(() => list.find((c) => c.id === selectedId) ?? null, [list, selectedId])
 
   const handleSelect = (id: number | null) => {
@@ -75,7 +75,7 @@ export function Dashboard() {
             <LiveDot size="md" />
             <h2 className="text-sm font-semibold uppercase tracking-wider">Live monitoring</h2>
             <span className="label-mono rounded-sm bg-muted px-2 py-0.5 text-muted-foreground">
-              {list.length} active source{list.length === 1 ? '' : 's'}
+              {list.length} running camera{list.length === 1 ? '' : 's'}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -96,7 +96,7 @@ export function Dashboard() {
             </div>
             <Button size="sm" onClick={() => setAddCameraOpen(true)}>
               <Plus className="h-4 w-4" />
-              Add camera
+              Start camera
             </Button>
           </div>
         </div>
@@ -113,8 +113,8 @@ export function Dashboard() {
       <Dialog open={addCameraOpen} onOpenChange={setAddCameraOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a camera</DialogTitle>
-            <DialogDescription>Start a live feed from a webcam, RTSP URL, or upload a video file.</DialogDescription>
+            <DialogTitle>Start a camera</DialogTitle>
+            <DialogDescription>Start a saved camera, add a new webcam or stream URL, or upload a video file.</DialogDescription>
           </DialogHeader>
           <CameraControls onAdded={() => setAddCameraOpen(false)} />
         </DialogContent>

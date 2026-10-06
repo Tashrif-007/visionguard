@@ -6,6 +6,7 @@ import { RequireAdmin } from '@/components/RequireAdmin'
 import { LandingPage } from '@/pages/LandingPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { Dashboard } from '@/pages/Dashboard'
+import { CamerasPage } from '@/pages/CamerasPage'
 import { EventsPage } from '@/pages/EventsPage'
 import { AnalyticsPage } from '@/pages/AnalyticsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
@@ -26,6 +27,7 @@ export default function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/cameras" element={<CamerasPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/profile" element={<ProfilePage />} />

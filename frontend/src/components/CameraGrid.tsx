@@ -1,13 +1,13 @@
 import { Video as VideoIcon } from 'lucide-react'
 import { CameraTile } from '@/components/CameraTile'
-import type { VideoSource } from '@/types'
+import type { Camera } from '@/types'
 
-export function CameraGrid({ cameras }: { cameras: VideoSource[] }) {
+export function CameraGrid({ cameras }: { cameras: Camera[] }) {
   if (cameras.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-card p-10 text-muted-foreground">
         <VideoIcon className="h-8 w-8" />
-        <span className="text-sm">No active cameras — use &ldquo;Add camera&rdquo; above to start one</span>
+        <span className="text-sm">No cameras running — use &ldquo;Start camera&rdquo; above</span>
       </div>
     )
   }

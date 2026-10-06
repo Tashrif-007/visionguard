@@ -26,10 +26,17 @@ function errorDetail(error: unknown): string {
   );
 }
 
-export function ZoneEditor({ sourceId }: { sourceId: number }) {
-  const { data: config } = useCameraConfig(sourceId);
-  const saveZones = useSaveZones(sourceId);
-  const frameUrl = useLiveFrameUrl(sourceId);
+export function ZoneEditor({
+  cameraId,
+  live,
+}: {
+  cameraId: number;
+  /** Only a running camera has frames to draw over. */
+  live: boolean;
+}) {
+  const { data: config } = useCameraConfig(cameraId);
+  const saveZones = useSaveZones(cameraId);
+  const frameUrl = useLiveFrameUrl(cameraId, live);
 
   const [zones, setZones] = useState<ZoneWrite[]>([]);
   const [draft, setDraft] = useState<Point[]>([]);
@@ -101,7 +108,9 @@ export function ZoneEditor({ sourceId }: { sourceId: number }) {
           />
         ) : (
           <div className="flex h-48 w-80 items-center justify-center text-xs text-white/60">
-            Waiting for frames…
+            {live
+              ? "Waiting for frames…"
+              : "Start the camera to draw over its live view"}
           </div>
         )}
         <svg

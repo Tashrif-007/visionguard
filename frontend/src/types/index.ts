@@ -32,24 +32,32 @@ export interface ProfileUpdateRequest {
   email: string
 }
 
-export interface VideoSource {
+export type CameraStatus = 'running' | 'stopped' | 'ended' | 'offline' | 'error'
+
+/** A saved camera from the registry; `status` comes from the live capture pool. */
+export interface Camera {
   id: number
   name: string
   source_type: string
   source_uri: string
-  is_active: boolean
+  status: CameraStatus
   created_by: number | null
   created_at: string
 }
 
-export interface StartCameraRequest {
+export interface CameraCreate {
   name?: string | null
   source_uri?: string | null
 }
 
+export interface CameraUpdate {
+  name?: string
+  source_uri?: string
+}
+
 export interface Event {
   id: number
-  source_id: number
+  camera_id: number
   event_type: string
   timestamp: string
   image_path: string
@@ -110,7 +118,7 @@ export interface ScheduleConfig {
 }
 
 export interface CameraConfig {
-  source_id: number
+  camera_id: number
   zones: Zone[]
   schedule: ScheduleConfig | null
   armed: boolean
@@ -122,7 +130,7 @@ export interface DayCount {
 }
 
 export interface CameraCount {
-  source_id: number
+  camera_id: number
   name: string
   count: number
 }

@@ -3,7 +3,7 @@ import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { LiveDot } from '@/components/LiveDot'
 import { cn } from 'cn'
-import type { VideoSource } from '@/types'
+import type { Camera } from '@/types'
 
 const TYPE_LABELS: Record<string, string> = {
   webcam: 'Webcam',
@@ -18,7 +18,7 @@ export function CameraChipBar({
   selectedId,
   onSelect,
 }: {
-  cameras: VideoSource[]
+  cameras: Camera[]
   search: string
   onSearchChange: (value: string) => void
   selectedId: number | null
@@ -62,7 +62,7 @@ export function CameraChipBar({
           </button>
         ))}
         {cameras.length === 0 && (
-          <span className="label-mono text-muted-foreground">No active cameras yet</span>
+          <span className="label-mono text-muted-foreground">No cameras running</span>
         )}
       </div>
       <div className="relative w-full shrink-0 lg:w-72">

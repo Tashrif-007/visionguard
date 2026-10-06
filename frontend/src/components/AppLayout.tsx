@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BarChart3, History, LayoutGrid, ShieldHalf, UserCog, Users } from 'lucide-react'
+import { BarChart3, Cctv, History, LayoutGrid, ShieldHalf, UserCog, Users } from 'lucide-react'
 import { SystemStatusPanel } from '@/components/SystemStatusPanel'
 import { TopBar } from '@/components/TopBar'
 import { useCurrentUser } from '@/hooks/useAuth'
@@ -7,6 +7,7 @@ import { cn } from 'cn'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Live Monitoring',
+  '/cameras': 'Cameras',
   '/events': 'Events & Timeline',
   '/analytics': 'Event Analytics',
   '/profile': 'Profile',
@@ -62,6 +63,7 @@ export function AppLayout() {
           </div>
           <nav className="flex flex-col gap-1 p-2">
             <SideLink to="/dashboard" icon={LayoutGrid} label="Live Monitoring" />
+            <SideLink to="/cameras" icon={Cctv} label="Cameras" />
             <SideLink to="/events" icon={History} label="Events & Timeline" />
             <SideLink to="/analytics" icon={BarChart3} label="Event Analytics" />
             <SideLink to="/profile" icon={UserCog} label="Profile" />

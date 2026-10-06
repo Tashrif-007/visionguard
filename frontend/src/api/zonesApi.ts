@@ -2,19 +2,19 @@ import client from "@/api/client";
 import type { CameraConfig, ScheduleConfig, ZoneWrite } from "@/types";
 
 export const getCameraConfig = async (
-  sourceId: number,
+  cameraId: number,
 ): Promise<CameraConfig> =>
-  (await client.get<CameraConfig>(`/cameras/${sourceId}/config`)).data;
+  (await client.get<CameraConfig>(`/cameras/${cameraId}/config`)).data;
 
 export const saveZones = async (
-  sourceId: number,
+  cameraId: number,
   zones: ZoneWrite[],
 ): Promise<CameraConfig> =>
-  (await client.put<CameraConfig>(`/cameras/${sourceId}/zones`, zones)).data;
+  (await client.put<CameraConfig>(`/cameras/${cameraId}/zones`, zones)).data;
 
 export const saveSchedule = async (
-  sourceId: number,
+  cameraId: number,
   schedule: ScheduleConfig,
 ): Promise<CameraConfig> =>
-  (await client.put<CameraConfig>(`/cameras/${sourceId}/schedule`, schedule))
+  (await client.put<CameraConfig>(`/cameras/${cameraId}/schedule`, schedule))
     .data;

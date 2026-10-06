@@ -12,6 +12,7 @@ import {
   Users,
   Video,
 } from 'lucide-react'
+import { BeforeAfterSlider } from '@/components/BeforeAfterSlider'
 import { Reveal } from '@/components/Reveal'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,19 @@ const FEATURES = [
   { icon: Users, title: 'Roles built in', body: 'Admins create operator accounts. No open signup, JWT-protected end to end.' },
   { icon: Cpu, title: 'Edge friendly', body: 'A tiny CNN refines a physics prior, so it stays light enough for a small box on site.' },
 ]
+
+// Static CCTV-style overlay so the demo frame reads as a camera feed.
+function CameraHud() {
+  return (
+    <div className="pointer-events-none absolute inset-x-4 bottom-4 flex items-end justify-between font-mono text-[11px] text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.8)] sm:text-xs">
+      <span className="flex items-center gap-2">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+        REC · CAM 07 · OVERPASS NB
+      </span>
+      <span className="hidden sm:inline">2026-06-14 07:18:52</span>
+    </div>
+  )
+}
 
 export function LandingPage() {
   const { data: user } = useCurrentUser()
@@ -159,6 +173,53 @@ export function LandingPage() {
             </Reveal>
           ))}
         </div>
+      </section>
+
+      {/* Interactive before/after on a real frame run through the pipeline */}
+      <section className="border-t border-border bg-muted/40 px-6 py-16 md:px-10 md:py-24 lg:px-16">
+        <Reveal className="max-w-2xl">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            See the difference
+          </h2>
+          <p className="mt-6 text-3xl font-bold leading-tight tracking-tight">
+            One hazy camera frame, before and after.
+          </p>
+          <p className="mt-4 text-muted-foreground">
+            Move the cursor across the image (or drag on a touch screen) to compare the original frame with the
+            output of the dark channel prior and Tiny CNN pipeline.
+          </p>
+        </Reveal>
+        <Reveal delayMs={150} className="mx-auto mt-10 max-w-5xl">
+          <BeforeAfterSlider
+            beforeSrc="/demo/traffic-fog-hazy.jpg"
+            afterSrc="/demo/traffic-fog-dehazed.jpg"
+            beforeLabel="Original"
+            afterLabel="Dehazed"
+            alt="Overpass traffic camera view of a wet road in fog"
+            overlay={<CameraHud />}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Photo:{' '}
+            <a
+              href="https://commons.wikimedia.org/wiki/File:Traffic_in_the_midst_of_the_rain_and_fog.jpg"
+              className="underline underline-offset-2 hover:text-foreground"
+              target="_blank"
+              rel="noreferrer"
+            >
+              “Traffic in the midst of the rain and fog”
+            </a>{' '}
+            by Firedupformore,{' '}
+            <a
+              href="https://creativecommons.org/licenses/by-sa/4.0/"
+              className="underline underline-offset-2 hover:text-foreground"
+              target="_blank"
+              rel="noreferrer"
+            >
+              CC BY-SA 4.0
+            </a>
+            . Cropped, and the right side dehazed by VisionGuard; both versions are shared under the same license.
+          </p>
+        </Reveal>
       </section>
 
       {/* The physics — why the CNN stays small */}
