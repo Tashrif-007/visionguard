@@ -9,10 +9,9 @@ import numpy as np
 
 from backend.config import settings
 from backend.db.database import SessionLocal
-from backend.db.repositories import video_source_repository
 from backend.models.tiny_cnn import TinyTransmissionCNN
 from backend.services import event_service, pipeline, schedule as schedule_utils
-from backend.services.camera_config import CameraConfig
+from backend.services.camera_config import CameraConfig, CameraStatus
 from backend.services.clip_recorder import ClipRecorder, FinishedClip, write_clip
 from backend.services.motion.motion_detector import MotionDetector
 from backend.services.motion.roi import ROIBox, extract_roi
@@ -87,10 +86,17 @@ class CaptureManager:
         self._recorder = ClipRecorder()
         self._frame_lock = threading.Lock()
         self._latest_jpeg: bytes | None = None
+        self._exit_status: CameraStatus | None = None
 
     @property
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def status(self) -> CameraStatus:
+        if self.is_running:
+            return CameraStatus.RUNNING
+        return self._exit_status or CameraStatus.STOPPED
 
     def get_latest_jpeg(self) -> bytes | None:
         with self._frame_lock:
@@ -100,7 +106,7 @@ class CaptureManager:
         # Single reference assignment: the capture thread reads self._config once per frame.
         self._config = config
 
-    def start(self, source_id: int, source_uri: str) -> None:
+    def start(self, camera_id: int, source_uri: str) -> None:
         self.stop()
         capture = cv2.VideoCapture(int(source_uri) if source_uri.isdigit() else source_uri)
         if not capture.isOpened():
@@ -110,14 +116,15 @@ class CaptureManager:
 
         is_file = Path(source_uri).is_file()
         self._stop_event.clear()
+        self._exit_status = None
         self._thread = threading.Thread(
             target=self._run,
-            args=(capture, source_id, is_file),
-            name=f"capture-source-{source_id}",
+            args=(capture, camera_id, is_file),
+            name=f"capture-camera-{camera_id}",
             daemon=True,
         )
         self._thread.start()
-        logger.info("Capture started for source id=%d uri=%s", source_id, source_uri)
+        logger.info("Capture started for camera id=%d uri=%s", camera_id, source_uri)
 
     def stop(self) -> None:
         if self._thread is None:
@@ -131,28 +138,28 @@ class CaptureManager:
             self._latest_jpeg = None
         logger.info("Capture stopped")
 
-    def _run(self, capture: cv2.VideoCapture, source_id: int, is_file: bool) -> None:
+    def _run(self, capture: cv2.VideoCapture, camera_id: int, is_file: bool) -> None:
         detector = MotionDetector(max_side=settings.motion_max_side)
         self._recorder = ClipRecorder()
         self._motion_streak = 0
         try:
             with ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-log") as executor:
                 if is_file:
-                    self._run_file_source(capture, source_id, detector, executor)
+                    self._run_file_source(capture, camera_id, detector, executor)
                 else:
-                    self._run_live_source(capture, source_id, detector, executor)
+                    self._run_live_source(capture, camera_id, detector, executor)
                 for clip in self._recorder.flush():
                     executor.submit(write_clip, clip)
         except Exception:
-            logger.exception("Capture loop for source id=%d crashed; deactivating", source_id)
-            self._deactivate_source(source_id)
+            logger.exception("Capture loop for camera id=%d crashed", camera_id)
+            self._exit_status = CameraStatus.ERROR
         finally:
             capture.release()
 
     def _run_file_source(
         self,
         capture: cv2.VideoCapture,
-        source_id: int,
+        camera_id: int,
         detector: MotionDetector,
         executor: ThreadPoolExecutor,
     ) -> None:
@@ -167,12 +174,12 @@ class CaptureManager:
         while not self._stop_event.is_set():
             ret, frame = capture.read()
             if not ret:
-                logger.info("Source id=%d ended; deactivating", source_id)
-                self._deactivate_source(source_id)
+                logger.info("Camera id=%d reached the end of its file", camera_id)
+                self._exit_status = CameraStatus.ENDED
                 return
             frame_number += 1
             last_event_time, last_preview_at = self._process_frame(
-                frame, source_id, frame_number, detector, executor, last_event_time, last_preview_at
+                frame, camera_id, frame_number, detector, executor, last_event_time, last_preview_at
             )
 
             next_frame_at += frame_delay
@@ -191,7 +198,7 @@ class CaptureManager:
     def _run_live_source(
         self,
         capture: cv2.VideoCapture,
-        source_id: int,
+        camera_id: int,
         detector: MotionDetector,
         executor: ThreadPoolExecutor,
     ) -> None:
@@ -206,14 +213,14 @@ class CaptureManager:
                 frame, last_seen = reader.read_latest(last_seen)
                 if frame is None:
                     if reader.ended:
-                        logger.info("Source id=%d ended or failed; deactivating", source_id)
-                        self._deactivate_source(source_id)
+                        logger.info("Camera id=%d stopped delivering frames", camera_id)
+                        self._exit_status = CameraStatus.OFFLINE
                         return
                     time.sleep(0.002)
                     continue
                 frame_number += 1
                 last_event_time, last_preview_at = self._process_frame(
-                    frame, source_id, frame_number, detector, executor, last_event_time, last_preview_at
+                    frame, camera_id, frame_number, detector, executor, last_event_time, last_preview_at
                 )
         finally:
             reader.stop()
@@ -221,7 +228,7 @@ class CaptureManager:
     def _process_frame(
         self,
         frame: np.ndarray,
-        source_id: int,
+        camera_id: int,
         frame_number: int,
         detector: MotionDetector,
         executor: ThreadPoolExecutor,
@@ -260,7 +267,7 @@ class CaptureManager:
                 # then log off-thread so disk I/O and the DB insert never
                 # stall the next capture.read().
                 clip_path = self._recorder.start_clip()
-                executor.submit(self._log_event, source_id, frame.copy(), bbox, frame_number, str(clip_path))
+                executor.submit(self._log_event, camera_id, frame.copy(), bbox, frame_number, str(clip_path))
             cv2.rectangle(
                 frame,
                 (bbox.x, bbox.y),
@@ -316,37 +323,28 @@ class CaptureManager:
         return mask
 
     def _log_event(
-        self, source_id: int, frame: np.ndarray, bbox: ROIBox, frame_number: int, clip_path: str
+        self, camera_id: int, frame: np.ndarray, bbox: ROIBox, frame_number: int, clip_path: str
     ) -> None:
         db = SessionLocal()
         try:
             event_service.log_motion_event(
                 db=db,
-                source_id=source_id,
+                camera_id=camera_id,
                 frame=frame,
                 bbox=bbox,
                 frame_number=frame_number,
                 clip_path=clip_path,
             )
         except Exception:
-            logger.exception("Failed to log motion event for source id=%d", source_id)
-        finally:
-            db.close()
-
-    def _deactivate_source(self, source_id: int) -> None:
-        db = SessionLocal()
-        try:
-            video_source_repository.deactivate_source(db, source_id)
-        except Exception:
-            logger.exception("Failed to deactivate source id=%d after capture end", source_id)
+            logger.exception("Failed to log motion event for camera id=%d", camera_id)
         finally:
             db.close()
 
 
 class CapturePool:
-    """Owns one CaptureManager per concurrently active video source.
+    """Owns one CaptureManager per started camera.
 
-    Each source gets its own capture thread, motion detector, and latest-JPEG
+    Each camera gets its own capture thread, motion detector, and latest-JPEG
     buffer, so multiple cameras/uploads can run and be viewed side by side —
     starting one no longer stops any other.
     """
@@ -356,21 +354,21 @@ class CapturePool:
         self._lock = threading.Lock()
         self._managers: dict[int, CaptureManager] = {}
 
-    def start(self, source_id: int, source_uri: str, config: CameraConfig | None = None) -> None:
+    def start(self, camera_id: int, source_uri: str, config: CameraConfig | None = None) -> None:
         manager = CaptureManager(model=self._model, config=config)
-        manager.start(source_id=source_id, source_uri=source_uri)
+        manager.start(camera_id=camera_id, source_uri=source_uri)
         with self._lock:
-            self._managers[source_id] = manager
+            self._managers[camera_id] = manager
 
-    def update_config(self, source_id: int, config: CameraConfig) -> None:
+    def update_config(self, camera_id: int, config: CameraConfig) -> None:
         with self._lock:
-            manager = self._managers.get(source_id)
+            manager = self._managers.get(camera_id)
         if manager is not None:
             manager.update_config(config)
 
-    def stop(self, source_id: int) -> None:
+    def stop(self, camera_id: int) -> None:
         with self._lock:
-            manager = self._managers.pop(source_id, None)
+            manager = self._managers.pop(camera_id, None)
         if manager is not None:
             manager.stop()
 
@@ -381,12 +379,15 @@ class CapturePool:
         for manager in managers:
             manager.stop()
 
-    def get_latest_jpeg(self, source_id: int) -> bytes | None:
+    def get_latest_jpeg(self, camera_id: int) -> bytes | None:
         with self._lock:
-            manager = self._managers.get(source_id)
+            manager = self._managers.get(camera_id)
         return manager.get_latest_jpeg() if manager is not None else None
 
-    def is_running(self, source_id: int) -> bool:
+    def is_running(self, camera_id: int) -> bool:
+        return self.status(camera_id) == CameraStatus.RUNNING
+
+    def status(self, camera_id: int) -> CameraStatus:
         with self._lock:
-            manager = self._managers.get(source_id)
-        return manager is not None and manager.is_running
+            manager = self._managers.get(camera_id)
+        return manager.status if manager is not None else CameraStatus.STOPPED

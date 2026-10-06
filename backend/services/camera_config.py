@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import time
+from enum import StrEnum
 
 
 @dataclass(frozen=True)
@@ -23,3 +24,13 @@ class CameraConfig:
 
     zones: tuple[Zone, ...] = ()
     schedule: Schedule | None = None
+
+
+class CameraStatus(StrEnum):
+    """What CapturePool.status() reports for a camera."""
+
+    RUNNING = "running"
+    STOPPED = "stopped"  # never started, or stopped by a user
+    ENDED = "ended"  # an uploaded/file source played to the end
+    OFFLINE = "offline"  # a live stream stopped delivering frames
+    ERROR = "error"  # the capture loop crashed

@@ -7,7 +7,7 @@ class EventRead(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    source_id: int
+    camera_id: int
     event_type: str
     timestamp: datetime
     image_path: str
@@ -32,7 +32,7 @@ class EventListResponse(BaseModel):
 
 
 class EventFilterParams(BaseModel):
-    source_id: int | None = None
+    camera_id: int | None = None
     event_type: str | None = None
     from_ts: datetime | None = None
     to_ts: datetime | None = None
@@ -46,7 +46,7 @@ class DayCount(BaseModel):
 
 
 class CameraCount(BaseModel):
-    source_id: int
+    camera_id: int
     name: str
     count: int
 

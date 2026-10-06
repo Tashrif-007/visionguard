@@ -25,7 +25,7 @@ class ScheduleRead(ScheduleWrite):
 
 
 class CameraConfigRead(BaseModel):
-    source_id: int
+    camera_id: int
     zones: list[ZoneRead]
     schedule: ScheduleRead | None
     armed: bool

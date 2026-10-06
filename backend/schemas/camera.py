@@ -1,20 +1,26 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from backend.services.camera_config import CameraStatus
 
 
-class StartCameraRequest(BaseModel):
-    name: str | None = None
-    source_uri: str | None = None
+class CameraCreate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    # Webcam index ("0"), stream URL or file path; defaults to VIDEO_SOURCE.
+    source_uri: str | None = Field(default=None, min_length=1)
 
 
-class VideoSourceRead(BaseModel):
-    model_config = {"from_attributes": True}
+class CameraUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    source_uri: str | None = Field(default=None, min_length=1)
 
+
+class CameraRead(BaseModel):
     id: int
     name: str
     source_type: str
     source_uri: str
-    is_active: bool
-    created_by: int | None = None
+    status: CameraStatus
+    created_by: int
     created_at: datetime

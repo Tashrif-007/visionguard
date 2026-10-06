@@ -30,7 +30,7 @@ class EventNotFoundError(Exception):
 
 def log_motion_event(
     db: Session,
-    source_id: int,
+    camera_id: int,
     frame: np.ndarray,
     bbox: ROIBox,
     frame_number: int | None,
@@ -44,7 +44,7 @@ def log_motion_event(
 
     event = event_repository.create_event(
         db=db,
-        source_id=source_id,
+        camera_id=camera_id,
         event_type="motion",
         timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         image_path=str(image_path),
@@ -56,13 +56,14 @@ def log_motion_event(
         frame_number=frame_number,
         clip_path=clip_path,
     )
-    logger.info("Logged motion event id=%d source=%d roi=%s", event.id, source_id, bbox)
+    logger.info("Logged motion event id=%d camera=%d roi=%s", event.id, camera_id, bbox)
     return event
 
 
 def list_events(
     db: Session,
-    source_id: int | None,
+    owner_id: int,
+    camera_id: int | None,
     event_type: str | None,
     from_ts: datetime | None,
     to_ts: datetime | None,
@@ -71,7 +72,8 @@ def list_events(
 ) -> EventListResponse:
     events, total = event_repository.get_events(
         db=db,
-        source_id=source_id,
+        owner_id=owner_id,
+        camera_id=camera_id,
         event_type=event_type,
         from_ts=from_ts,
         to_ts=to_ts,
@@ -84,8 +86,8 @@ def list_events(
     )
 
 
-def get_event_snapshot(db: Session, event_id: int) -> bytes:
-    event = event_repository.get_event_by_id(db, event_id)
+def get_event_snapshot(db: Session, event_id: int, owner_id: int) -> bytes:
+    event = event_repository.get_event_by_id(db, event_id, owner_id)
     if event is None:
         raise EventNotFoundError(f"Event {event_id} not found")
 
@@ -101,8 +103,8 @@ def get_event_snapshot(db: Session, event_id: int) -> bytes:
     return image_path.read_bytes()
 
 
-def get_event_clip_path(db: Session, event_id: int) -> Path:
-    event = event_repository.get_event_by_id(db, event_id)
+def get_event_clip_path(db: Session, event_id: int, owner_id: int) -> Path:
+    event = event_repository.get_event_by_id(db, event_id, owner_id)
     if event is None or event.clip_path is None:
         raise EventNotFoundError(f"Event {event_id} has no clip")
 
@@ -115,8 +117,8 @@ def get_event_clip_path(db: Session, event_id: int) -> Path:
     return clip_path
 
 
-def delete_event(db: Session, event_id: int) -> None:
-    event = event_repository.get_event_by_id(db, event_id)
+def delete_event(db: Session, event_id: int, owner_id: int) -> None:
+    event = event_repository.get_event_by_id(db, event_id, owner_id)
     if event is None:
         raise EventNotFoundError(f"Event {event_id} not found")
 
@@ -139,22 +141,22 @@ def delete_event(db: Session, event_id: int) -> None:
 
 
 def get_event_stats(
-    db: Session, source_id: int | None, from_ts: datetime | None, to_ts: datetime | None
+    db: Session, owner_id: int, camera_id: int | None, from_ts: datetime | None, to_ts: datetime | None
 ) -> EventStatsResponse:
     tz = settings.schedule_timezone
-    per_day = event_repository.count_per_day(db, tz, source_id, from_ts, to_ts)
-    coverage = dict(event_repository.count_coverage(db, source_id, from_ts, to_ts))
+    per_day = event_repository.count_per_day(db, owner_id, tz, camera_id, from_ts, to_ts)
+    coverage = dict(event_repository.count_coverage(db, owner_id, camera_id, from_ts, to_ts))
     labels = [label for label, _ in event_repository.COVERAGE_BUCKETS] + ["unknown"]
     return EventStatsResponse(
         total=sum(n for _, n in per_day),
         per_day=[DayCount(date=d, count=n) for d, n in per_day],
         per_camera=[
-            CameraCount(source_id=sid, name=name, count=n)
-            for sid, name, n in event_repository.count_per_camera(db, source_id, from_ts, to_ts)
+            CameraCount(camera_id=cid, name=name, count=n)
+            for cid, name, n in event_repository.count_per_camera(db, owner_id, camera_id, from_ts, to_ts)
         ],
         heatmap=[
             HeatmapCell(weekday=w, hour=h, count=n)
-            for w, h, n in event_repository.count_heatmap(db, tz, source_id, from_ts, to_ts)
+            for w, h, n in event_repository.count_heatmap(db, owner_id, tz, camera_id, from_ts, to_ts)
         ],
         coverage=[CoverageBucket(label=label, count=coverage.get(label, 0)) for label in labels],
     )
