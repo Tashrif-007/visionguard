@@ -30,7 +30,7 @@ BLOCKS = json.loads((ROOT / 'build' / 'blocks.json').read_text())
 TEXT_W = 9867          # twips between the report's 1020 / 1033 indents
 TABLE_W = 9840         # same width as the report's existing tables
 EMU_PER_TWIP = 635
-MAX_FIG_H_IN = 7.3
+MAX_FIG_H_IN = 8.0
 
 # ---------------------------------------------------------------- ids
 _bm = [100]
@@ -358,10 +358,10 @@ def main(src, dst):
         ind.set(f'{{{W}}}left', '1298')
         ind.set(f'{{{W}}}hanging', '278')
         pg_no = pages[b['bookmark']]
-        label = f'{b["num"]}.  {b["text"]}'
+        label = f'{b["num"]}. {b["text"]}'
         link = etree.fromstring(
             f'<w:hyperlink xmlns:w="{W}" w:history="1" w:anchor="{b["bookmark"]}">'
-            f'<w:r><w:rPr><w:b w:val="0"/></w:rPr><w:t xml:space="preserve">{escape(label)}</w:t></w:r>'
+            f'<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">{escape(label)}</w:t></w:r>'
             f'<w:r><w:rPr><w:b w:val="0"/></w:rPr><w:tab/></w:r>'
             f'<w:r><w:rPr><w:b w:val="0"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>'
             f'<w:r><w:rPr><w:b w:val="0"/></w:rPr><w:instrText xml:space="preserve"> PAGEREF {b["bookmark"]} \\h </w:instrText></w:r>'

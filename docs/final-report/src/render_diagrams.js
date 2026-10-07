@@ -2,8 +2,8 @@
 const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
-const defs = require('./diagrams.js');
-const OUT = path.join(__dirname, '..', 'assets', 'diagrams');
+const defs = require(process.env.DEFS || './diagrams.js');
+const OUT = path.join(__dirname, '..', 'assets', process.env.OUTDIR || 'diagrams');
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
@@ -11,7 +11,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const page = await browser.newPage();
   await page.setContent('<html><body style="margin:0;background:#fff"><div id="out"></div></body></html>');
   await page.addScriptTag({ url: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js' });
-  await page.evaluate(() => mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', themeVariables: { fontSize: '15px' }, flowchart: { htmlLabels: true, useMaxWidth: false }, sequence: { useMaxWidth: false, width: 130, actorMargin: 25, wrap: true, messageFontSize: 14, noteFontSize: 13 }, state: { useMaxWidth: false }, class: { useMaxWidth: false }, er: { useMaxWidth: false } }));
+  await page.evaluate((compact, seqW, seqM) => mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', themeVariables: { fontSize: compact ? '19px' : '15px' }, flowchart: { htmlLabels: true, useMaxWidth: false }, sequence: compact ? { useMaxWidth: false, width: seqW, height: 46, actorMargin: seqM, boxMargin: 6, messageMargin: 28, wrap: true, messageFontSize: 18, noteFontSize: 16, actorFontSize: 17 } : { useMaxWidth: false, width: 130, actorMargin: 25, wrap: true, messageFontSize: 14, noteFontSize: 13 }, state: { useMaxWidth: false }, class: { useMaxWidth: false }, er: { useMaxWidth: false } }), !!process.env.COMPACT, +(process.env.SEQW || 120), +(process.env.SEQM || 14));
   const only = process.argv[2];
   for (const [name, src] of Object.entries(defs)) {
     if (only && only !== name) continue;
