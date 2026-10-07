@@ -1,0 +1,393 @@
+import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+from backend.config import settings
+from backend.db.database import SessionLocal
+from backend.models.tiny_cnn import TinyTransmissionCNN
+from backend.services import event_service, pipeline, schedule as schedule_utils
+from backend.services.camera_config import CameraConfig, CameraStatus
+from backend.services.clip_recorder import ClipRecorder, FinishedClip, write_clip
+from backend.services.motion.motion_detector import MotionDetector
+from backend.services.motion.roi import ROIBox, extract_roi
+from backend.services.motion.zones import build_zone_mask
+
+logger = logging.getLogger(__name__)
+
+
+class CaptureError(Exception):
+    """Raised when a video source cannot be opened for capture."""
+
+
+class _LatestFrameReader:
+    """Background reader for live sources: keeps only the newest frame.
+
+    A dedicated thread continuously calls capture.read() and stores just the
+    most recent frame behind a lock, discarding anything the processing loop
+    hasn't kept up with. This bounds capture lag to ~1 frame regardless of
+    how slow downstream processing is, instead of frames backing up
+    unboundedly when the pipeline falls behind the camera's real framerate.
+    """
+
+    def __init__(self, capture: cv2.VideoCapture) -> None:
+        self._capture = capture
+        self._lock = threading.Lock()
+        self._frame: np.ndarray | None = None
+        self._counter = 0
+        self._ended = False
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="capture-reader", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=5.0)
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            ret, frame = self._capture.read()
+            if not ret:
+                self._ended = True
+                return
+            with self._lock:
+                self._frame = frame
+                self._counter += 1
+
+    def read_latest(self, last_seen: int) -> tuple[np.ndarray | None, int]:
+        with self._lock:
+            if self._counter == last_seen:
+                return None, last_seen
+            return self._frame, self._counter
+
+    @property
+    def ended(self) -> bool:
+        return self._ended
+
+
+class CaptureManager:
+    """Owns the background capture thread and the latest processed frame."""
+
+    def __init__(self, model: TinyTransmissionCNN | None = None, config: CameraConfig | None = None) -> None:
+        self._model = model
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._motion_streak = 0
+        self._config = config or CameraConfig()
+        self._zone_mask: tuple[CameraConfig, tuple[int, int], np.ndarray | None] | None = None
+        self._armed = True
+        self._armed_checked_at = float("-inf")
+        self._recorder = ClipRecorder()
+        self._frame_lock = threading.Lock()
+        self._latest_jpeg: bytes | None = None
+        self._exit_status: CameraStatus | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def status(self) -> CameraStatus:
+        if self.is_running:
+            return CameraStatus.RUNNING
+        return self._exit_status or CameraStatus.STOPPED
+
+    def get_latest_jpeg(self) -> bytes | None:
+        with self._frame_lock:
+            return self._latest_jpeg
+
+    def update_config(self, config: CameraConfig) -> None:
+        # Single reference assignment: the capture thread reads self._config once per frame.
+        self._config = config
+
+    def start(self, camera_id: int, source_uri: str) -> None:
+        self.stop()
+        capture = cv2.VideoCapture(int(source_uri) if source_uri.isdigit() else source_uri)
+        if not capture.isOpened():
+            capture.release()
+            raise CaptureError(f"Cannot open video source: {source_uri}")
+        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # best-effort; ignored by some backends
+
+        is_file = Path(source_uri).is_file()
+        self._stop_event.clear()
+        self._exit_status = None
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(capture, camera_id, is_file),
+            name=f"capture-camera-{camera_id}",
+            daemon=True,
+        )
+        self._thread.start()
+        logger.info("Capture started for camera id=%d uri=%s", camera_id, source_uri)
+
+    def stop(self) -> None:
+        if self._thread is None:
+            return
+        self._stop_event.set()
+        self._thread.join(timeout=5.0)
+        if self._thread.is_alive():
+            logger.warning("Capture thread did not stop within timeout")
+        self._thread = None
+        with self._frame_lock:
+            self._latest_jpeg = None
+        logger.info("Capture stopped")
+
+    def _run(self, capture: cv2.VideoCapture, camera_id: int, is_file: bool) -> None:
+        detector = MotionDetector(max_side=settings.motion_max_side)
+        self._recorder = ClipRecorder()
+        self._motion_streak = 0
+        try:
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-log") as executor:
+                if is_file:
+                    self._run_file_source(capture, camera_id, detector, executor)
+                else:
+                    self._run_live_source(capture, camera_id, detector, executor)
+                for clip in self._recorder.flush():
+                    executor.submit(write_clip, clip)
+        except Exception:
+            logger.exception("Capture loop for camera id=%d crashed", camera_id)
+            self._exit_status = CameraStatus.ERROR
+        finally:
+            capture.release()
+
+    def _run_file_source(
+        self,
+        capture: cv2.VideoCapture,
+        camera_id: int,
+        detector: MotionDetector,
+        executor: ThreadPoolExecutor,
+    ) -> None:
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        frame_delay = 1.0 / fps if fps > 0 else 1.0 / 30.0
+
+        frame_number = 0
+        last_event_time = 0.0
+        last_preview_at = 0.0
+        next_frame_at = time.monotonic()
+
+        while not self._stop_event.is_set():
+            ret, frame = capture.read()
+            if not ret:
+                logger.info("Camera id=%d reached the end of its file", camera_id)
+                self._exit_status = CameraStatus.ENDED
+                return
+            frame_number += 1
+            last_event_time, last_preview_at = self._process_frame(
+                frame, camera_id, frame_number, detector, executor, last_event_time, last_preview_at
+            )
+
+            next_frame_at += frame_delay
+            sleep_for = next_frame_at - time.monotonic()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            elif sleep_for < -frame_delay * settings.capture_max_lag_frames:
+                # Fallen far behind real-time playback: decode-skip (grab, no
+                # colour convert) to catch up rather than playing back slower
+                # and slower.
+                skipped = min(int(-sleep_for / frame_delay), settings.capture_max_lag_frames)
+                for _ in range(skipped):
+                    capture.grab()
+                next_frame_at = time.monotonic()
+
+    def _run_live_source(
+        self,
+        capture: cv2.VideoCapture,
+        camera_id: int,
+        detector: MotionDetector,
+        executor: ThreadPoolExecutor,
+    ) -> None:
+        reader = _LatestFrameReader(capture)
+        reader.start()
+        try:
+            frame_number = 0
+            last_event_time = 0.0
+            last_preview_at = 0.0
+            last_seen = 0
+            while not self._stop_event.is_set():
+                frame, last_seen = reader.read_latest(last_seen)
+                if frame is None:
+                    if reader.ended:
+                        logger.info("Camera id=%d stopped delivering frames", camera_id)
+                        self._exit_status = CameraStatus.OFFLINE
+                        return
+                    time.sleep(0.002)
+                    continue
+                frame_number += 1
+                last_event_time, last_preview_at = self._process_frame(
+                    frame, camera_id, frame_number, detector, executor, last_event_time, last_preview_at
+                )
+        finally:
+            reader.stop()
+
+    def _process_frame(
+        self,
+        frame: np.ndarray,
+        camera_id: int,
+        frame_number: int,
+        detector: MotionDetector,
+        executor: ThreadPoolExecutor,
+        last_event_time: float,
+        last_preview_at: float,
+    ) -> tuple[float, float]:
+        # The background model keeps learning even while disarmed, so re-arming
+        # doesn't trigger a burst of false motion.
+        mask = detector.apply(frame)
+        bbox: ROIBox | None = None
+        if self._is_armed() and frame_number > settings.motion_warmup_frames:
+            zone_mask = self._get_zone_mask(mask.shape[:2])
+            if zone_mask is not None:
+                mask = cv2.bitwise_and(mask, zone_mask)
+            bbox = extract_roi(
+                mask,
+                min_area=settings.motion_min_area,
+                padding=settings.roi_padding,
+                frame_shape=frame.shape[:2],
+                max_area_ratio=settings.roi_max_area_ratio,
+            )
+
+        if bbox is not None:
+            roi_slice = frame[bbox.y : bbox.y + bbox.height, bbox.x : bbox.x + bbox.width]
+            frame[bbox.y : bbox.y + bbox.height, bbox.x : bbox.x + bbox.width] = (
+                pipeline.dehaze_roi(roi_slice, model=self._model)
+            )
+            now = time.monotonic()
+            self._motion_streak += 1
+            if (
+                self._motion_streak >= settings.motion_min_frames
+                and now - last_event_time >= settings.event_cooldown_seconds
+            ):
+                last_event_time = now
+                # Snapshot the frame (copy) before drawing the rectangle below,
+                # then log off-thread so disk I/O and the DB insert never
+                # stall the next capture.read().
+                clip_path = self._recorder.start_clip()
+                executor.submit(self._log_event, camera_id, frame.copy(), bbox, frame_number, str(clip_path))
+            cv2.rectangle(
+                frame,
+                (bbox.x, bbox.y),
+                (bbox.x + bbox.width, bbox.y + bbox.height),
+                (0, 255, 0),
+                2,
+            )
+
+        else:
+            self._motion_streak = 0
+
+        now = time.monotonic()
+        for clip in self._recorder.add_frame(frame, now):
+            executor.submit(write_clip, clip)
+
+        if now - last_preview_at >= 1.0 / settings.preview_fps:
+            last_preview_at = now
+            preview = frame
+            height, width = frame.shape[:2]
+            if width > settings.preview_max_width:
+                scale = settings.preview_max_width / width
+                preview = cv2.resize(
+                    frame,
+                    (settings.preview_max_width, max(1, round(height * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, encoded = cv2.imencode(
+                ".jpg", preview, [int(cv2.IMWRITE_JPEG_QUALITY), settings.preview_jpeg_quality]
+            )
+            if ok:
+                with self._frame_lock:
+                    self._latest_jpeg = encoded.tobytes()
+
+        return last_event_time, last_preview_at
+
+    def _is_armed(self) -> bool:
+        # The schedule only changes on minute boundaries; re-evaluate once a second.
+        now = time.monotonic()
+        if now - self._armed_checked_at >= 1.0:
+            self._armed_checked_at = now
+            self._armed = schedule_utils.is_armed(
+                schedule_utils.now_in_timezone(settings.schedule_timezone), self._config.schedule
+            )
+        return self._armed
+
+    def _get_zone_mask(self, shape: tuple[int, int]) -> np.ndarray | None:
+        config = self._config
+        cached = self._zone_mask
+        if cached is not None and cached[0] is config and cached[1] == shape:
+            return cached[2]
+        mask = build_zone_mask(shape, config.zones)
+        self._zone_mask = (config, shape, mask)
+        return mask
+
+    def _log_event(
+        self, camera_id: int, frame: np.ndarray, bbox: ROIBox, frame_number: int, clip_path: str
+    ) -> None:
+        db = SessionLocal()
+        try:
+            event_service.log_motion_event(
+                db=db,
+                camera_id=camera_id,
+                frame=frame,
+                bbox=bbox,
+                frame_number=frame_number,
+                clip_path=clip_path,
+            )
+        except Exception:
+            logger.exception("Failed to log motion event for camera id=%d", camera_id)
+        finally:
+            db.close()
+
+
+class CapturePool:
+    """Owns one CaptureManager per started camera.
+
+    Each camera gets its own capture thread, motion detector, and latest-JPEG
+    buffer, so multiple cameras/uploads can run and be viewed side by side —
+    starting one no longer stops any other.
+    """
+
+    def __init__(self, model: TinyTransmissionCNN | None = None) -> None:
+        self._model = model
+        self._lock = threading.Lock()
+        self._managers: dict[int, CaptureManager] = {}
+
+    def start(self, camera_id: int, source_uri: str, config: CameraConfig | None = None) -> None:
+        manager = CaptureManager(model=self._model, config=config)
+        manager.start(camera_id=camera_id, source_uri=source_uri)
+        with self._lock:
+            self._managers[camera_id] = manager
+
+    def update_config(self, camera_id: int, config: CameraConfig) -> None:
+        with self._lock:
+            manager = self._managers.get(camera_id)
+        if manager is not None:
+            manager.update_config(config)
+
+    def stop(self, camera_id: int) -> None:
+        with self._lock:
+            manager = self._managers.pop(camera_id, None)
+        if manager is not None:
+            manager.stop()
+
+    def stop_all(self) -> None:
+        with self._lock:
+            managers = list(self._managers.values())
+            self._managers.clear()
+        for manager in managers:
+            manager.stop()
+
+    def get_latest_jpeg(self, camera_id: int) -> bytes | None:
+        with self._lock:
+            manager = self._managers.get(camera_id)
+        return manager.get_latest_jpeg() if manager is not None else None
+
+    def is_running(self, camera_id: int) -> bool:
+        return self.status(camera_id) == CameraStatus.RUNNING
+
+    def status(self, camera_id: int) -> CameraStatus:
+        with self._lock:
+            manager = self._managers.get(camera_id)
+        return manager.status if manager is not None else CameraStatus.STOPPED

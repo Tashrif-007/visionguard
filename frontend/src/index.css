@@ -1,0 +1,198 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Console theme, after the Stitch "Nordic Frost" (light) and "Glacier Dark"
+  (dark) designs: indigo primary, sky accent for live/healthy state, tonal
+  surfaces separated by 1px borders. Data (timestamps, ids, coordinates,
+  status chips) is set in JetBrains Mono, copy in Geist.
+  Dark mode is toggled via the .dark class on <html> (see hooks/useTheme.ts),
+  matching shadcn's convention — not the old [data-theme] attribute.
+*/
+
+:root {
+  --radius: 0.5rem;
+
+  --background: #faf8ff;
+  --foreground: #131b2e;
+  --card: #ffffff;
+  --card-foreground: #131b2e;
+  --popover: #ffffff;
+  --popover-foreground: #131b2e;
+  --border: #c7c4d8;
+  --input: #c7c4d8;
+  --muted: #f2f3ff;
+  --muted-foreground: #464555;
+  --primary: #3525cd;
+  --primary-foreground: #ffffff;
+  --secondary: #eaedff;
+  --secondary-foreground: #131b2e;
+  --accent: #e2e7ff;
+  --accent-foreground: #131b2e;
+  --success: #006591;
+  --warning: #b45309;
+  --destructive: #ba1a1a;
+  --destructive-foreground: #ffffff;
+  --ring: #4f46e5;
+  --shadow-color: 232 40% 14%;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #131b2e;
+  --sidebar-primary: #3525cd;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaedff;
+  --sidebar-accent-foreground: #131b2e;
+  --sidebar-border: #c7c4d8;
+  --sidebar-ring: #4f46e5;
+}
+
+.dark {
+  --background: #0b1326;
+  --foreground: #dae2fd;
+  --card: #171f33;
+  --card-foreground: #dae2fd;
+  --popover: #171f33;
+  --popover-foreground: #dae2fd;
+  --border: #2d3449;
+  --input: #2d3449;
+  --muted: #131b2e;
+  --muted-foreground: #c7c4d7;
+  --primary: #c0c1ff;
+  --primary-foreground: #1000a9;
+  --secondary: #222a3d;
+  --secondary-foreground: #dae2fd;
+  --accent: #2d3449;
+  --accent-foreground: #dae2fd;
+  --success: #7bd0ff;
+  --warning: #fbbf24;
+  --destructive: #ffb4ab;
+  --destructive-foreground: #690005;
+  --ring: #8083ff;
+  --shadow-color: 0 0% 0%;
+
+  --sidebar: #060e20;
+  --sidebar-foreground: #dae2fd;
+  --sidebar-primary: #c0c1ff;
+  --sidebar-primary-foreground: #1000a9;
+  --sidebar-accent: #222a3d;
+  --sidebar-accent-foreground: #dae2fd;
+  --sidebar-border: #2d3449;
+  --sidebar-ring: #8083ff;
+}
+
+body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+#root {
+  min-height: 100svh;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
+}
+
+/* Uppercase mono micro-label used for section headings, chips and metadata. */
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Landing page motion — all disabled under prefers-reduced-motion */
+@keyframes vg-sweep {
+  from { clip-path: polygon(72% 0, 100% 0, 100% 100%, 60% 100%); }
+  to { clip-path: polygon(28% 0, 100% 0, 100% 100%, 16% 100%); }
+}
+@keyframes vg-scan {
+  from { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  to { transform: translateY(3.5rem); opacity: 0; }
+}
+@keyframes vg-step {
+  0%, 30%, 100% { box-shadow: 0 0 0 0 transparent; background-color: var(--background); }
+  10% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 25%, transparent); background-color: var(--accent); }
+}
+@keyframes vg-travel {
+  from { left: 0; }
+  to { left: 100%; }
+}
+@keyframes vg-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.vg-sweep { animation: vg-sweep 7s ease-in-out infinite alternate; }
+.vg-scan { animation: vg-scan 2.4s ease-in-out infinite; }
+.vg-step { animation: vg-step 6s ease-in-out infinite; }
+.vg-travel { animation: vg-travel 6s linear infinite; }
+.vg-float { animation: vg-float 4s ease-in-out infinite; }
+.vg-reveal { opacity: 0; transform: translateY(20px); transition: opacity .7s ease, transform .7s ease; }
+.vg-reveal.is-visible { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vg-sweep, .vg-scan, .vg-step, .vg-travel, .vg-float { animation: none; }
+  .vg-reveal { opacity: 1; transform: none; transition: none; }
+}

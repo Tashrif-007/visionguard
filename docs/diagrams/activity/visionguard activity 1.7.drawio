@@ -1,0 +1,81 @@
+<mxfile host="app.diagrams.net" agent="Claude Code">
+  <diagram id="nl-event-search-activity" name="NL Event Search (Activity Level-1.7)">
+    <mxGraphModel dx="1123" dy="633" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="30" width="30" x="425" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="queryInput" parent="1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" value="Enter plain-English query" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="sendClaude" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Send query to LLM&amp;nbsp;" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="filtersExtracted" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" value="filters extracted?" vertex="1">
+          <mxGeometry height="70" width="140" x="370" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="buildFilters" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Build structured filters&#xa;(time range, type)" vertex="1">
+          <mxGeometry height="60" width="220" x="150" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="noFilters" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Use no filters&#xa;(return all events)" vertex="1">
+          <mxGeometry height="60" width="220" x="530" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="queryDb" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Query events in DB" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="displayResults" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" value="Display results&amp;nbsp;" vertex="1">
+          <mxGeometry height="60" width="180" x="350" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="endOuter" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="30" width="30" x="425" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="endInner" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="14" width="14" x="433" y="728" as="geometry" />
+        </mxCell>
+        <mxCell id="e-start-queryInput" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="queryInput">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-queryInput-sendClaude" edge="1" parent="1" source="queryInput" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="sendClaude">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sendClaude-filtersExtracted" edge="1" parent="1" source="sendClaude" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="filtersExtracted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-filtersExtracted-buildFilters" edge="1" parent="1" source="filtersExtracted" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" target="buildFilters" value="yes">
+          <mxGeometry relative="1" x="-0.4838" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-filtersExtracted-noFilters" edge="1" parent="1" source="filtersExtracted" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" target="noFilters" value="no">
+          <mxGeometry relative="1" x="-0.1489" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-buildFilters-queryDb" edge="1" parent="1" source="buildFilters" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="queryDb">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="500" />
+              <mxPoint x="440" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-noFilters-queryDb" edge="1" parent="1" source="noFilters" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="queryDb">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="500" />
+              <mxPoint x="440" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-queryDb-displayResults" edge="1" parent="1" source="queryDb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="displayResults">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-displayResults-end" edge="1" parent="1" source="displayResults" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="endOuter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

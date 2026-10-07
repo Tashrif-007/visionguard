@@ -1,0 +1,6 @@
+node_modules/
+out/body.*
+out/front.*
+out/cover.*
+out/dummy.*
+logs/
