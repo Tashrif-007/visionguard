@@ -26,10 +26,9 @@ const STEPS = [
 ]
 
 const STATS = [
-  { value: '30 FPS', label: 'on a plain CPU' },
+  { value: 'CPU only', label: 'on a plain CPU' },
   { value: '0 GPUs', label: 'required' },
   { value: 'ROI only', label: 'never the full frame' },
-  { value: 'Top-K', label: 'stable atmospheric light' },
 ]
 
 const FEATURES = [
@@ -39,6 +38,12 @@ const FEATURES = [
   { icon: Gauge, title: 'Analytics', body: 'Events per day, per camera, a weekday-by-hour heatmap and motion-size breakdowns.' },
   { icon: Users, title: 'Roles built in', body: 'Admins create operator accounts. No open signup, JWT-protected end to end.' },
   { icon: Cpu, title: 'Edge friendly', body: 'A tiny CNN refines a physics prior, so it stays light enough for a small box on site.' },
+]
+
+const PRINCIPLES = [
+  { icon: ShieldHalf, title: 'Explainable', body: 'The clear image is rebuilt by the physical haze model, so every pixel can be traced and nothing is invented.' },
+  { icon: Cpu, title: 'Lightweight', body: 'The network is only four small layers, so it runs on a plain CPU at the edge.' },
+  { icon: Crop, title: 'Focused', body: 'Dehazing runs only where motion is detected, never on the whole frame.' },
 ]
 
 // Static CCTV-style overlay so the demo frame reads as a camera feed.
@@ -87,7 +92,7 @@ export function LandingPage() {
           </h1>
           <p className="mt-6 max-w-md text-lg text-muted-foreground">
             VisionGuard AI restores visibility in hazy CCTV footage in real time — only on the regions
-            where motion happens, so a single CPU keeps up at 30 FPS.
+            where motion happens, so a single CPU is all it needs.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Button size="lg" onClick={goToApp}>
@@ -101,8 +106,6 @@ export function LandingPage() {
             <span>CPU-only</span>
             <span className="h-1 w-1 rounded-full bg-border" />
             <span>No GPU required</span>
-            <span className="h-1 w-1 rounded-full bg-border" />
-            <span>30 FPS</span>
           </div>
         </div>
 
@@ -138,7 +141,7 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-border bg-muted/40 px-6 py-10 md:px-10 lg:px-16">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
           {STATS.map((stat, i) => (
             <Reveal key={stat.value} delayMs={i * 100}>
               <p className="font-mono text-2xl font-semibold text-primary">{stat.value}</p>
@@ -238,23 +241,19 @@ export function LandingPage() {
               physical model itself, so the output stays explainable and not a black box.
             </p>
           </Reveal>
-          <Reveal delayMs={150}>
-            <div className="vg-float rounded-lg border border-border bg-card p-6">
-              <p className="label-mono text-muted-foreground">Atmospheric scattering model</p>
-              <p className="mt-4 font-mono text-xl text-primary">I(x) = J(x)·t(x) + A·(1 − t(x))</p>
-              <p className="mt-4 font-mono text-xl text-primary">J(x) = (I(x) − A) / t(x) + A</p>
-              <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                <dt className="font-mono text-foreground">I</dt>
-                <dd className="text-muted-foreground">observed hazy frame</dd>
-                <dt className="font-mono text-foreground">J</dt>
-                <dd className="text-muted-foreground">recovered clear scene</dd>
-                <dt className="font-mono text-foreground">t</dt>
-                <dd className="text-muted-foreground">transmission, refined by the Tiny CNN</dd>
-                <dt className="font-mono text-foreground">A</dt>
-                <dd className="text-muted-foreground">atmospheric light, averaged over the Top-K brightest pixels</dd>
-              </dl>
-            </div>
-          </Reveal>
+          <div className="flex flex-col gap-4">
+            {PRINCIPLES.map((item, i) => (
+              <Reveal key={item.title} delayMs={150 + i * 100}>
+                <div className="flex gap-4 rounded-lg border border-border bg-card p-5">
+                  <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                  <div>
+                    <h3 className="font-semibold">{item.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
