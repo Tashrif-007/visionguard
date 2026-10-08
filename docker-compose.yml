@@ -4,12 +4,11 @@ services:
     container_name: visionguard-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-visionguard}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-visionguard}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     ports:
-      # Host port 5432 is usually taken by a local Postgres, so default to 5434.
-      - "${DB_HOST_PORT:-5434}:5432"
+      - "${DB_HOST_PORT:?set DB_HOST_PORT in .env}:5432"
     volumes:
       - visionguard-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,4 +19,4 @@ services:
 
 volumes:
   visionguard-pgdata:
-    external: true # reuse the volume created earlier by `docker run`
+    external: true 
