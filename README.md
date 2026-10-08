@@ -1,75 +1,120 @@
-# VisionGuard AI
+<p align="center">
+  <img src="docs/logo.png" alt="VisionGuard AI logo" width="120" />
+</p>
 
-A lightweight, CPU-friendly CCTV surveillance platform that enhances visibility in hazy or smoggy footage in real time. It combines classical computer vision (Dark Channel Prior) with a Tiny CNN that refines the transmission map, and only runs the dehazing pipeline on the motion-detected region of each frame, not the full frame, so it stays fast without a GPU.
+<h1 align="center">VisionGuard AI</h1>
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full architecture, pipeline, and coding-standards reference.
+<p align="center">
+  <b>Live demo:</b> <a href="https://visionguarding.netlify.app">visionguarding.netlify.app</a>
+</p>
 
-## Prerequisites
+VisionGuard AI is a lightweight, CPU-friendly CCTV surveillance platform that restores visibility in hazy or smoggy footage in real time. It pairs a classical Dark Channel Prior (DCP) with a Tiny CNN that refines the transmission map, and it only dehazes the region where motion was detected, so it runs without a GPU.
+
+## Features
+
+- **Hybrid dehazing:** DCP and atmospheric scattering model, with a Tiny CNN refining the transmission map.
+- **Motion-gated ROI processing:** frames with no motion are skipped, and only the motion region is dehazed.
+- **Multi-camera:** webcam, IP/RTSP stream, uploaded video, or a phone/laptop camera streamed from the browser. Cameras start and stop independently.
+- **Detection zones and schedules:** include/exclude polygons and weekly arming schedules per camera.
+- **Event logging:** timestamped events with snapshot, video clip and ROI coordinates, plus a timeline browser.
+- **Natural-language search:** ask "any motion last night?" and an LLM (via OpenRouter) turns it into filters.
+- **Analytics:** events per day, per camera, weekday x hour heatmap.
+- **Accounts:** JWT auth with admin-seeded accounts; every user's cameras and events are private to them.
+
+## Getting started
+
+### Prerequisites
 
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL 14+
-- An OpenRouter API key (optional — enables natural-language event search; the app runs fine without one, queries just return unfiltered results)
+- PostgreSQL 14+ (or Docker, see `docker-compose.yml`)
+- Optional: an [OpenRouter](https://openrouter.ai) API key for natural-language search. Without one, queries return unfiltered results.
 
-## Backend setup
+### 1. Backend
 
 ```bash
-# from the repo root
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
 
-Create the database:
-
-```bash
 createdb visionguard
-```
-
-Configure environment variables:
-
-```bash
 cp .env.example .env
 ```
 
-Fill in at least `POSTGRES_*`, `JWT_SECRET_KEY` (any long random string), and `ADMIN_EMAIL` and `ADMIN_PASSWORD` (used to seed the first admin account on startup; `ADMIN_NAME` is optional). `OPENROUTER_API_KEY` is optional (`OPENROUTER_MODEL` picks the model, default `qwen/qwen3.8-27b:free`). `MODEL_PATH` already points at the checked-in Tiny CNN weights (`backend/weights/tiny_cnn.pth`), no download needed.
-
-Run the API from the repo root (imports are rooted at `backend.*`):
+Edit `.env` and set at least `POSTGRES_*`, `JWT_SECRET_KEY` (any long random string), and `ADMIN_EMAIL` / `ADMIN_PASSWORD` (seeds the first admin on startup). The Tiny CNN weights are checked in at `backend/weights/tiny_cnn.pth`.
 
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-The API is now at `http://localhost:8000`, with interactive docs at `http://localhost:8000/docs`. On first startup it seeds an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — log in with those (login is by email), then create operator accounts from the Admin page in the UI (or `POST /auth/users`).
+The API runs at `http://localhost:8000` (docs at `/docs`). Database migrations are applied automatically on startup.
 
-Startup also applies any pending database migrations (Alembic, in `backend/db/migrations/`). To manage them by hand, from the repo root:
-
-```bash
-alembic upgrade head                           # apply pending migrations
-alembic revision --autogenerate -m "message"   # draft a migration after editing backend/db/models.py
-alembic downgrade -1                           # undo the last migration
-```
-
-Cameras are saved once on the **Cameras** page (or through "Start camera" on the live view), then started and stopped from there.
-
-## Frontend setup
+### 2. Frontend
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env   # VITE_API_URL defaults to http://localhost:8000, matching the backend above
+cp .env.example .env   # VITE_API_URL defaults to http://localhost:8000
 npm run dev
 ```
 
-The dashboard is now at `http://localhost:5173`.
+Open `http://localhost:5173` and sign in with the admin credentials from `.env`.
 
-## Running tests
+### 3. Tests
 
 ```bash
 source venv/bin/activate
 pytest
 ```
 
-## Training the Tiny CNN
+## Architecture
 
-Training code lives in `training/` and is separate from the inference path (`backend/services/dehazing/refine.py` only loads weights, it never trains). See `training/train.py` for synthetic-data training and `training/revide.py` for fine-tuning on the paired REVIDE haze dataset, which is not included in this repo and must be downloaded separately.
+```mermaid
+flowchart LR
+    subgraph FE["Frontend: React + TypeScript + Vite"]
+        P[Pages / components] --> H[React Query hooks] --> A[Axios API layer]
+    end
+
+    subgraph BE["Backend: FastAPI"]
+        R[Routers] --> C[Controllers] --> S[Services]
+        S --> Repo[Repositories]
+    end
+
+    A -- "REST + JWT / WebSocket" --> R
+    Repo --> DB[(PostgreSQL)]
+    S --> LLM[OpenRouter LLM<br/>search query parsing]
+    S --> CP[CapturePool<br/>one worker per camera]
+    CP --> PL
+    CP --> FS[(Snapshots, clips, uploads)]
+
+    subgraph PL["Dehazing pipeline"]
+        direction LR
+        M[Motion detection] --> ROI[ROI extraction] --> D[Dark channel + atmospheric light]
+        D --> T[Coarse transmission] --> CNN[Tiny CNN refinement]
+        CNN --> Rad[Radiance recovery + gamma] --> Merge[Merge ROI into frame]
+    end
+```
+
+**Core idea:** physics prior (DCP) plus lightweight learning (Tiny CNN). The CNN only refines the transmission map; all image reconstruction uses the atmospheric scattering model.
+
+- **Layering:** routers define routes only, controllers orchestrate, services hold business logic, repositories are the only code that touches the database.
+- **Capture:** each camera runs in its own worker inside `CapturePool`. Frames without motion are skipped, and detected motion becomes an event with a snapshot and clip.
+- **Multi-tenancy:** every camera, and everything under it, belongs to exactly one user.
+
+## Screenshots
+
+| Landing | Login |
+|---|---|
+| ![Landing](docs/screenshots/landing.png) | ![Login](docs/screenshots/login.png) |
+
+| Live dashboard | Cameras |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Cameras](docs/screenshots/cameras.png) |
+
+| Events timeline | Analytics |
+|---|---|
+| ![Events](docs/screenshots/events.png) | ![Analytics](docs/screenshots/analytics.png) |
+
+| Detection zones | Admin |
+|---|---|
+| ![Zones](docs/screenshots/zones.png) | ![Admin](docs/screenshots/admin.png) |
