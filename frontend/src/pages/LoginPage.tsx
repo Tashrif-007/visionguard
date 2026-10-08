@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldHalf } from 'lucide-react'
+import { BrandLogo } from '@/components/BrandLogo'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -32,9 +32,7 @@ export function LoginPage() {
           than inventing a new decorative element. */}
       <div className="dark relative hidden flex-col justify-between overflow-hidden bg-sidebar p-10 text-foreground lg:flex">
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <ShieldHalf className="h-4 w-4" />
-          </span>
+          <BrandLogo />
           <span className="text-sm font-semibold">VisionGuard AI</span>
         </div>
 
@@ -60,9 +58,7 @@ export function LoginPage() {
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ShieldHalf className="h-4.5 w-4.5" />
-            </span>
+            <BrandLogo className="h-9 w-9" />
             <span className="text-sm font-semibold">VisionGuard AI</span>
           </div>
 

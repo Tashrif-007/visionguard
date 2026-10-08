@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Camera
 from backend.schemas.camera import CameraCreate, CameraRead, CameraUpdate
 from backend.services import camera_service
-from backend.services.camera_service import CameraBusyError, DuplicateCameraError
+from backend.services.camera_service import CameraBusyError, CameraSourceError, DuplicateCameraError
 from backend.services.capture_service import CaptureError, CapturePool
 from backend.services.zone_service import CameraNotFoundError
 
@@ -29,7 +29,7 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
-_CAMERA_ERRORS = (CameraNotFoundError, DuplicateCameraError, CameraBusyError, CaptureError)
+_CAMERA_ERRORS = (CameraNotFoundError, DuplicateCameraError, CameraBusyError, CameraSourceError, CaptureError)
 
 
 def list_cameras(db: Session, pool: CapturePool, owner_id: int) -> list[CameraRead]:

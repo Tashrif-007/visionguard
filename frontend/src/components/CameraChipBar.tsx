@@ -9,6 +9,7 @@ const TYPE_LABELS: Record<string, string> = {
   webcam: 'Webcam',
   ip_camera: 'IP',
   upload: 'Upload',
+  browser: 'Browser',
 }
 
 export function CameraChipBar({

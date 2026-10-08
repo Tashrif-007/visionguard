@@ -13,6 +13,7 @@ import {
   Video,
 } from 'lucide-react'
 import { BeforeAfterSlider } from '@/components/BeforeAfterSlider'
+import { BrandLogo } from '@/components/BrandLogo'
 import { Reveal } from '@/components/Reveal'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
@@ -68,9 +69,7 @@ export function LandingPage() {
     <div className="min-h-svh bg-background text-foreground">
       <header className="flex items-center justify-between px-6 py-5 md:px-10 lg:px-16">
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <ShieldHalf className="h-4 w-4" />
-          </span>
+          <BrandLogo />
           <span className="text-sm font-semibold">VisionGuard AI</span>
         </div>
         <div className="flex items-center gap-2">

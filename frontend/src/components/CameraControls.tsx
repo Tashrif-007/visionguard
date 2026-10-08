@@ -5,6 +5,7 @@ import { Play, Plus, Settings2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useBrowserStream } from '@/hooks/useBrowserStream'
 import { useAddAndStartCamera, useCameras, useStartCamera, useUploadVideo } from '@/hooks/useCamera'
 
 function errorDetail(error: unknown): string | undefined {
@@ -14,6 +15,7 @@ function errorDetail(error: unknown): string | undefined {
 function SavedCameraList({ onStarted }: { onStarted?: () => void }) {
   const { data: cameras } = useCameras()
   const startCamera = useStartCamera()
+  const browserStream = useBrowserStream()
   const stopped = (cameras ?? []).filter((c) => c.status !== 'running')
 
   if (stopped.length === 0) {
@@ -32,7 +34,19 @@ function SavedCameraList({ onStarted }: { onStarted?: () => void }) {
             size="sm"
             variant="outline"
             disabled={startCamera.isPending}
-            onClick={() =>
+            onClick={() => {
+              if (camera.source_type === 'browser') {
+                browserStream
+                  .start(camera.id)
+                  .then(() => {
+                    toast.success(`${camera.name} started`)
+                    onStarted?.()
+                  })
+                  .catch((error: unknown) =>
+                    toast.error(error instanceof Error ? error.message : 'Could not start camera'),
+                  )
+                return
+              }
               startCamera.mutate(camera.id, {
                 onSuccess: () => {
                   toast.success(`${camera.name} started`)
@@ -40,7 +54,7 @@ function SavedCameraList({ onStarted }: { onStarted?: () => void }) {
                 },
                 onError: (error) => toast.error(errorDetail(error) ?? 'Could not start camera'),
               })
-            }
+            }}
           >
             <Play className="h-3.5 w-3.5" />
             Start
