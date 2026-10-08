@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BarChart3, Cctv, History, LayoutGrid, ShieldHalf, UserCog, Users } from 'lucide-react'
+import { BarChart3, Cctv, History, LayoutGrid, UserCog, Users } from 'lucide-react'
+import { BrandLogo } from '@/components/BrandLogo'
 import { BrowserStreamProvider } from '@/hooks/useBrowserStream'
 import { SystemStatusPanel } from '@/components/SystemStatusPanel'
 import { TopBar } from '@/components/TopBar'
@@ -55,9 +56,7 @@ export function AppLayout() {
         <aside className="flex w-14 shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-64">
           <div className="flex flex-col">
             <div className="flex h-14 items-center justify-center gap-2.5 border-b border-sidebar-border lg:justify-start lg:px-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <ShieldHalf className="h-4 w-4" />
-              </span>
+              <BrandLogo />
               <span className="hidden flex-col leading-tight lg:flex">
                 <span className="text-sm font-semibold tracking-tight">VisionGuard</span>
                 <span className="label-mono text-muted-foreground">AI Surveillance</span>
