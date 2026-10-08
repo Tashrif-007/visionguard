@@ -20,6 +20,9 @@ from backend.services.motion.zones import build_zone_mask
 logger = logging.getLogger(__name__)
 
 
+BROWSER_SOURCE_PREFIX = "browser:"
+
+
 class CaptureError(Exception):
     """Raised when a video source cannot be opened for capture."""
 
@@ -71,6 +74,49 @@ class _LatestFrameReader:
         return self._ended
 
 
+class PushFrameReader:
+    """Frame source fed by a browser over a WebSocket instead of a capture device.
+
+    Same contract as _LatestFrameReader: only the newest frame is kept, so a
+    slow pipeline drops frames rather than building lag. Frames are resized to
+    the first frame's shape so the motion detector and clip recorder always
+    see one resolution.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._frame: np.ndarray | None = None
+        self._counter = 0
+        self._shape: tuple[int, int] | None = None
+        self._ended = False
+
+    def start(self) -> None:
+        """Nothing to start: frames arrive through push()."""
+
+    def stop(self) -> None:
+        self._ended = True
+
+    def push(self, frame: np.ndarray) -> None:
+        height, width = frame.shape[:2]
+        with self._lock:
+            if self._shape is None:
+                self._shape = (height, width)
+            elif self._shape != (height, width):
+                frame = cv2.resize(frame, (self._shape[1], self._shape[0]), interpolation=cv2.INTER_AREA)
+            self._frame = frame
+            self._counter += 1
+
+    def read_latest(self, last_seen: int) -> tuple[np.ndarray | None, int]:
+        with self._lock:
+            if self._counter == last_seen:
+                return None, last_seen
+            return self._frame, self._counter
+
+    @property
+    def ended(self) -> bool:
+        return self._ended
+
+
 class CaptureManager:
     """Owns the background capture thread and the latest processed frame."""
 
@@ -87,6 +133,7 @@ class CaptureManager:
         self._frame_lock = threading.Lock()
         self._latest_jpeg: bytes | None = None
         self._exit_status: CameraStatus | None = None
+        self._push_reader: PushFrameReader | None = None
 
     @property
     def is_running(self) -> bool:
@@ -108,23 +155,41 @@ class CaptureManager:
 
     def start(self, camera_id: int, source_uri: str) -> None:
         self.stop()
-        capture = cv2.VideoCapture(int(source_uri) if source_uri.isdigit() else source_uri)
-        if not capture.isOpened():
-            capture.release()
-            raise CaptureError(f"Cannot open video source: {source_uri}")
-        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # best-effort; ignored by some backends
+        source: cv2.VideoCapture | PushFrameReader
+        if source_uri.startswith(BROWSER_SOURCE_PREFIX):
+            source = PushFrameReader()
+            self._push_reader = source
+            is_file = False
+        else:
+            source = cv2.VideoCapture(int(source_uri) if source_uri.isdigit() else source_uri)
+            if not source.isOpened():
+                source.release()
+                raise CaptureError(f"Cannot open video source: {source_uri}")
+            source.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # best-effort; ignored by some backends
+            is_file = Path(source_uri).is_file()
 
-        is_file = Path(source_uri).is_file()
         self._stop_event.clear()
         self._exit_status = None
         self._thread = threading.Thread(
             target=self._run,
-            args=(capture, camera_id, is_file),
+            args=(source, camera_id, is_file),
             name=f"capture-camera-{camera_id}",
             daemon=True,
         )
         self._thread.start()
         logger.info("Capture started for camera id=%d uri=%s", camera_id, source_uri)
+
+    def push_jpeg(self, data: bytes) -> bool:
+        """Decode a JPEG sent by a browser camera; False once the capture is no longer running."""
+        reader = self._push_reader
+        if reader is None or not self.is_running:
+            return False
+        frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            logger.warning("Dropped an undecodable browser frame")
+            return True
+        reader.push(frame)
+        return True
 
     def stop(self) -> None:
         if self._thread is None:
@@ -134,27 +199,33 @@ class CaptureManager:
         if self._thread.is_alive():
             logger.warning("Capture thread did not stop within timeout")
         self._thread = None
+        self._push_reader = None
         with self._frame_lock:
             self._latest_jpeg = None
         logger.info("Capture stopped")
 
-    def _run(self, capture: cv2.VideoCapture, camera_id: int, is_file: bool) -> None:
+    def _run(self, source: cv2.VideoCapture | PushFrameReader, camera_id: int, is_file: bool) -> None:
         detector = MotionDetector(max_side=settings.motion_max_side)
         self._recorder = ClipRecorder()
         self._motion_streak = 0
         try:
             with ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-log") as executor:
-                if is_file:
-                    self._run_file_source(capture, camera_id, detector, executor)
+                if isinstance(source, PushFrameReader):
+                    self._run_live_source(source, camera_id, detector, executor)
+                elif is_file:
+                    self._run_file_source(source, camera_id, detector, executor)
                 else:
-                    self._run_live_source(capture, camera_id, detector, executor)
+                    reader = _LatestFrameReader(source)
+                    reader.start()
+                    self._run_live_source(reader, camera_id, detector, executor)
                 for clip in self._recorder.flush():
                     executor.submit(write_clip, clip)
         except Exception:
             logger.exception("Capture loop for camera id=%d crashed", camera_id)
             self._exit_status = CameraStatus.ERROR
         finally:
-            capture.release()
+            if isinstance(source, cv2.VideoCapture):
+                source.release()
 
     def _run_file_source(
         self,
@@ -197,13 +268,11 @@ class CaptureManager:
 
     def _run_live_source(
         self,
-        capture: cv2.VideoCapture,
+        reader: _LatestFrameReader | PushFrameReader,
         camera_id: int,
         detector: MotionDetector,
         executor: ThreadPoolExecutor,
     ) -> None:
-        reader = _LatestFrameReader(capture)
-        reader.start()
         try:
             frame_number = 0
             last_event_time = 0.0
@@ -383,6 +452,11 @@ class CapturePool:
         with self._lock:
             manager = self._managers.get(camera_id)
         return manager.get_latest_jpeg() if manager is not None else None
+
+    def push_jpeg(self, camera_id: int, data: bytes) -> bool:
+        with self._lock:
+            manager = self._managers.get(camera_id)
+        return manager.push_jpeg(data) if manager is not None else False
 
     def is_running(self, camera_id: int) -> bool:
         return self.status(camera_id) == CameraStatus.RUNNING

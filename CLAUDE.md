@@ -66,6 +66,7 @@ Future: predict **residual** `Δt` instead of absolute `t`, so `t_final = t_DCP 
 | Timeline / event browser | MVP |
 | Natural language event search (e.g. "any motion last night?") | MVP |
 | Multi-camera support (concurrent feeds, independent start/stop) | MVP |
+| Browser camera (device webcam/phone camera streamed from the browser over WebSocket) | Implemented |
 | Object detection / intrusion detection | Future only |
 | ONNX Runtime inference | Future only |
 | FFmpeg integration | Future only |
@@ -301,6 +302,7 @@ visionguard/
 | PUT | `/cameras/{camera_id}/zones` | Replace a camera's include/exclude detection zones |
 | PUT | `/cameras/{camera_id}/schedule` | Set a camera's arming schedule |
 | GET | `/cameras/{camera_id}/frame` | Latest processed frame for a running camera |
+| WS | `/ws/cameras/{camera_id}/stream` | Browser camera: first message = bearer token, server replies `ready`, then the browser sends JPEG frames (starts/stops the camera) |
 | GET | `/system/status` | Health and pipeline status |
 
 ---
@@ -458,7 +460,7 @@ The neural network exists to refine DCP output, not to replace physics. Keep the
 
 ## Roadmap — features proposed after the MVP (read before starting a new session)
 
-**Already implemented (do not redo):** Alembic migrations (`backend/db/migrations/`, baseline `0001` + `0002` camera registry + `0003` camera ownership / per-user isolation); camera registry (`cameras` table — one row per source URI, soft delete via `deleted_at`; events/zones/schedules reference `camera_id`; running state is in-memory only via `CapturePool.status()`; `/cameras` page with start/stop/configure/edit/delete; the old per-start `video_sources` table is gone); multi-camera `CapturePool`; per-camera detection zones (include/exclude polygons) and weekly arming schedules (`camera_zones`, `camera_schedules`, `PUT /cameras/{id}/zones|schedule`, applied live); motion persistence (`MOTION_MIN_FRAMES`) + `events.roi_area_ratio`; event video clips (`services/clip_recorder.py`, VP8 WebM, `GET /events/{id}/clip`); events analytics (`GET /events/stats`, `/analytics` page). Events stay labelled `motion` — never "intruder" (frame differencing cannot classify; classification is future work).
+**Already implemented (do not redo):** Alembic migrations (`backend/db/migrations/`, baseline `0001` + `0002` camera registry + `0003` camera ownership / per-user isolation); camera registry (`cameras` table — one row per source URI, soft delete via `deleted_at`; events/zones/schedules reference `camera_id`; running state is in-memory only via `CapturePool.status()`; `/cameras` page with start/stop/configure/edit/delete; the old per-start `video_sources` table is gone); multi-camera `CapturePool`; per-camera detection zones (include/exclude polygons) and weekly arming schedules (`camera_zones`, `camera_schedules`, `PUT /cameras/{id}/zones|schedule`, applied live); motion persistence (`MOTION_MIN_FRAMES`) + `events.roi_area_ratio`; event video clips (`services/clip_recorder.py`, VP8 WebM, `GET /events/{id}/clip`); events analytics (`GET /events/stats`, `/analytics` page); browser cameras (`source_type="browser"`, source `browser:<uuid>`; `PushFrameReader` in `capture_service.py` feeds the same pipeline; `routers/stream.py` WebSocket; frontend `BrowserStreamProvider` in `AppLayout` + `BrowserCameraCard` on `/cameras`; the tab must stay open and visible, and `POST /cameras/{id}/start` rejects browser cameras). Events stay labelled `motion` — never "intruder" (frame differencing cannot classify; classification is future work).
 
 **Proposed next modules (not implemented; user has only approved discussing them — confirm scope before building).** Each adds a frontend page:
 1. **Haze analytics (`/analytics/haze`)** — per-camera visibility score over time from the mean transmission, raw vs dehazed side-by-side on events (store the raw snapshot too), optional "dehaze only when haze is detected" to save CPU.
