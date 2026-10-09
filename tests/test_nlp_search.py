@@ -45,6 +45,7 @@ def test_parses_structured_reply(monkeypatch: pytest.MonkeyPatch, api_key: None)
     assert sent["headers"]["Authorization"] == "Bearer test-key"
     assert sent["json"]["model"] == settings.openrouter_model
     assert sent["json"]["response_format"]["type"] == "json_schema"
+    assert sent["json"]["reasoning"] == {"enabled": False}
 
 
 def test_unknown_event_type_and_bad_timestamp_are_dropped(monkeypatch: pytest.MonkeyPatch, api_key: None) -> None:

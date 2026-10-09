@@ -350,7 +350,7 @@ User query ("any motion last night?")
 **Key rules:**
 - `nlp_search.py` only calls OpenRouter and returns `ParsedFilters` — no DB access.
 - The OpenRouter call is the only place that uses an LLM; everything else is standard SQL.
-- `OPENROUTER_API_KEY` (and optionally `OPENROUTER_MODEL`, default `qwen/qwen3.8-27b:free`) must be in `.env` and loaded via `config.py`.
+- `OPENROUTER_API_KEY` (and optionally `OPENROUTER_MODEL`, default `nvidia/nemotron-3-super-120b-a12b:free`) must be in `.env` and loaded via `config.py`.
 - If the LLM cannot extract a time range, return all events (no filter) rather than erroring.
 - The frontend search input lives on the Events page; results reuse the existing `EventCard` component.
 
