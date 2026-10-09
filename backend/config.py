@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     clip_post_seconds: float = 6.0
     clip_fps: float = 10.0
     clip_max_width: int = 640
+    browser_stream_max_frame_bytes: int = 600_000
+    browser_stream_auth_timeout_seconds: float = 10.0
+    browser_stream_idle_timeout_seconds: float = 15.0
 
     dcp_patch_size: int = 15
     atmo_top_k_ratio: float = 0.001
@@ -31,7 +34,7 @@ class Settings(BaseSettings):
     refine_max_side: int = 256
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_model: str = "qwen/qwen3.8-27b:free"
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     openrouter_max_tokens: int = 512
     openrouter_timeout_seconds: float = 15.0
     openrouter_max_retries: int = 2

@@ -10,7 +10,7 @@ from backend.config import settings
 from backend.db.models import Camera
 from backend.db.repositories import camera_repository
 from backend.services import zone_service
-from backend.services.capture_service import CaptureError, CapturePool
+from backend.services.capture_service import BROWSER_SOURCE_PREFIX, CaptureError, CapturePool
 from backend.services.zone_service import CameraNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,17 @@ class CameraBusyError(Exception):
     """Raised when an operation needs the camera stopped (or not yet running)."""
 
 
+class CameraSourceError(Exception):
+    """Raised when an operation does not fit the camera's source type."""
+
+
+BROWSER_SOURCE_TYPE = "browser"
+_SOURCE_TYPES_KEPT_ON_EDIT = ("upload", BROWSER_SOURCE_TYPE)
+
+
 def _infer_source_type(source_uri: str) -> str:
+    if source_uri.startswith(BROWSER_SOURCE_PREFIX):
+        return BROWSER_SOURCE_TYPE
     return "webcam" if source_uri.isdigit() else "ip_camera"
 
 
@@ -62,7 +72,8 @@ def register_camera(
 ) -> Camera:
     uri = (source_uri if source_uri is not None else settings.video_source).strip()
     source_type = _infer_source_type(uri)
-    return _register(db, name or f"{source_type}:{uri}", source_type, uri, created_by)
+    default_name = "Browser camera" if source_type == BROWSER_SOURCE_TYPE else f"{source_type}:{uri}"
+    return _register(db, name or default_name, source_type, uri, created_by)
 
 
 def update_camera(
@@ -75,7 +86,9 @@ def update_camera(
             raise CameraBusyError("Stop the camera before changing its source")
         if camera_repository.get_by_uri(db, new_uri, owner_id) is not None:
             raise DuplicateCameraError("Another camera already uses this source")
-    source_type = camera.source_type if camera.source_type == "upload" else _infer_source_type(new_uri)
+    source_type = (
+        camera.source_type if camera.source_type in _SOURCE_TYPES_KEPT_ON_EDIT else _infer_source_type(new_uri)
+    )
     return camera_repository.update_camera(db, camera, name or camera.name, new_uri, source_type)
 
 
@@ -86,9 +99,8 @@ def delete_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int)
     logger.info("Deleted camera id=%d (events kept)", camera_id)
 
 
-def start_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int) -> Camera:
-    camera = _require_camera(db, camera_id, owner_id)
-    if pool.is_running(camera_id):
+def _start(db: Session, pool: CapturePool, camera: Camera) -> Camera:
+    if pool.is_running(camera.id):
         raise CameraBusyError(f"Camera '{camera.name}' is already running")
     pool.start(
         camera_id=camera.id,
@@ -97,6 +109,21 @@ def start_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int) 
     )
     logger.info("Started camera id=%d uri=%s", camera.id, camera.source_uri)
     return camera
+
+
+def start_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int) -> Camera:
+    camera = _require_camera(db, camera_id, owner_id)
+    if camera.source_type == BROWSER_SOURCE_TYPE:
+        raise CameraSourceError("A browser camera starts streaming from the browser that hosts the camera")
+    return _start(db, pool, camera)
+
+
+def start_browser_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int) -> Camera:
+    """Start a browser camera; called when its browser opens the frame stream."""
+    camera = _require_camera(db, camera_id, owner_id)
+    if camera.source_type != BROWSER_SOURCE_TYPE:
+        raise CameraSourceError(f"Camera '{camera.name}' is not a browser camera")
+    return _start(db, pool, camera)
 
 
 def stop_camera(db: Session, pool: CapturePool, camera_id: int, owner_id: int) -> Camera:

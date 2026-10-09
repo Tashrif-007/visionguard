@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.db.database import SessionLocal, run_migrations
-from backend.api.routers import auth, camera, events, search, system, zones
+from backend.api.routers import auth, camera, events, search, stream, system, zones
 from backend.models.tiny_cnn import load_tiny_cnn
 from backend.services import auth_service, runtime_tuning
 from backend.services.capture_service import CapturePool
@@ -51,3 +51,4 @@ app.include_router(search.router)
 app.include_router(events.router)
 app.include_router(camera.router)
 app.include_router(zones.router)
+app.include_router(stream.router)

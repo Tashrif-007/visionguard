@@ -10,6 +10,7 @@ const TYPE_LABELS: Record<string, string> = {
   webcam: "Webcam",
   ip_camera: "IP Camera",
   upload: "Upload",
+  browser: "Browser",
 };
 
 export function CameraTile({ camera }: { camera: Camera }) {

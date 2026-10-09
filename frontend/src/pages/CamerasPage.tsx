@@ -30,9 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BrowserCameraCard } from "@/components/BrowserCameraCard";
 import { CameraConfigDialog } from "@/components/CameraConfigDialog";
 import { CameraEditDialog } from "@/components/CameraEditDialog";
 import { RegisterCameraForm } from "@/components/RegisterCameraForm";
+import { useBrowserStream } from "@/hooks/useBrowserStream";
 import {
   useCameras,
   useDeleteCamera,
@@ -45,6 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
   webcam: "Webcam",
   ip_camera: "IP Camera",
   upload: "Upload",
+  browser: "Browser",
 };
 
 const STATUS_BADGES: Record<
@@ -67,9 +70,19 @@ function CameraActions({ camera }: { camera: Camera }) {
   const startCamera = useStartCamera();
   const stopCamera = useStopCamera();
   const deleteCamera = useDeleteCamera();
+  const browserStream = useBrowserStream();
   const running = camera.status === "running";
 
   const toggle = () => {
+    if (!running && camera.source_type === "browser") {
+      browserStream
+        .start(camera.id)
+        .then(() => toast.success(`${camera.name} started`))
+        .catch((error: unknown) =>
+          toast.error(error instanceof Error ? error.message : "Could not start camera"),
+        );
+      return;
+    }
     const mutation = running ? stopCamera : startCamera;
     mutation.mutate(camera.id, {
       onSuccess: () =>
@@ -171,8 +184,9 @@ export function CamerasPage() {
   return (
     <div className="h-full overflow-y-auto p-5">
       <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-4">
+        <div className="flex flex-col gap-4 lg:col-span-4">
           <RegisterCameraForm />
+          <BrowserCameraCard />
         </div>
 
         <Card className="lg:col-span-8">
