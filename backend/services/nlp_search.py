@@ -90,6 +90,8 @@ def _post_completion(q: str, system_prompt: str) -> httpx.Response:
                 {"role": "user", "content": q},
             ],
             "response_format": _response_format(),
+            # Reasoning models otherwise spend max_tokens on thinking and return no JSON.
+            "reasoning": {"enabled": False},
             # Only route to providers that honour response_format, so the reply is real JSON.
             "provider": {"require_parameters": True},
         },
