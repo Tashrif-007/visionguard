@@ -2,7 +2,13 @@ import { Video as VideoIcon } from 'lucide-react'
 import { CameraTile } from '@/components/CameraTile'
 import type { Camera } from '@/types'
 
-export function CameraGrid({ cameras }: { cameras: Camera[] }) {
+export function CameraGrid({
+  cameras,
+  onFocus,
+}: {
+  cameras: Camera[]
+  onFocus: (id: number) => void
+}) {
   if (cameras.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-card p-10 text-muted-foreground">
@@ -13,9 +19,9 @@ export function CameraGrid({ cameras }: { cameras: Camera[] }) {
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(440px,1fr))] gap-3">
       {cameras.map((camera) => (
-        <CameraTile key={camera.id} camera={camera} />
+        <CameraTile key={camera.id} camera={camera} onToggleFocus={() => onFocus(camera.id)} />
       ))}
     </div>
   )

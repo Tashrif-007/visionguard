@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    model_path: str = "backend/weights/tiny_cnn.pth"
+    model_path: str = "backend/weights/tiny_cnn_outdoor_v2.pth"
     video_source: str = "0"
     confidence_threshold: float = 0.5
     roi_padding: int = 20
@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     dehaze_t_min: float = 0.1
     dehaze_gamma: float = 0.85
     refine_max_side: int = 256
+    refine_blend: float = 0.3
+    sky_t_floor: float = 0.0
+    sky_min_value: float = 0.55
+    sky_max_saturation: float = 0.24
+    sky_search_fraction: float = 0.6
+    sky_edge_blur_sigma: float = 4.0
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"

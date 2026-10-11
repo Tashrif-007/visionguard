@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, History, LayoutGrid, Maximize2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { CameraChipBar } from '@/components/CameraChipBar'
 import { CameraControls } from '@/components/CameraControls'
 import { CameraGrid } from '@/components/CameraGrid'
+import { CameraThumb } from '@/components/CameraThumb'
 import { CameraTile } from '@/components/CameraTile'
 import { LiveDot } from '@/components/LiveDot'
 import { RecentEventsStrip } from '@/components/RecentEventsStrip'
@@ -66,6 +67,21 @@ export function Dashboard() {
     if (id !== null) setViewMode('focus')
   }
 
+  const exitFocus = () => {
+    setSelectedId(null)
+    setViewMode('grid')
+  }
+
+  // Esc leaves focus mode.
+  useEffect(() => {
+    if (viewMode !== 'focus') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') exitFocus()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [viewMode])
+
   return (
     <div className="flex h-full flex-col gap-3 p-5">
       {/* Control deck — title, view mode, add-camera action, camera filter */}
@@ -124,11 +140,27 @@ export function Dashboard() {
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading cameras…</p>
         ) : viewMode === 'focus' && focusCamera ? (
-          <div className="mx-auto max-w-4xl">
-            <CameraTile camera={focusCamera} />
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="flex min-w-0 flex-1 justify-center">
+              {/* Largest 16:9 frame that still fits the viewport height. */}
+              <div className="w-full max-w-[min(100%,calc((100vh-25rem)*1.7778))]">
+                <CameraTile camera={focusCamera} focused onToggleFocus={exitFocus} />
+              </div>
+            </div>
+            {list.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto lg:w-60 lg:shrink-0 lg:flex-col lg:overflow-x-visible">
+                {list
+                  .filter((camera) => camera.id !== focusCamera.id)
+                  .map((camera) => (
+                    <div key={camera.id} className="w-56 shrink-0 lg:w-full">
+                      <CameraThumb camera={camera} onSelect={() => handleSelect(camera.id)} />
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         ) : (
-          <CameraGrid cameras={list} />
+          <CameraGrid cameras={list} onFocus={handleSelect} />
         )}
       </div>
 

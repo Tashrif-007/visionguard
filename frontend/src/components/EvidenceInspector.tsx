@@ -39,7 +39,7 @@ function RoiBox({ event, frame }: { event: Event; frame: FrameSize }) {
   );
 }
 
-function InspectorBody({ event }: { event: Event }) {
+function InspectorBody({ event, cameraName }: { event: Event; cameraName: string }) {
   const { objectUrl, isError } = useSnapshotObjectUrl(event.id);
   const [frame, setFrame] = useState<FrameSize | null>(null);
   const [view, setView] = useState<"video" | "frame">(event.has_clip ? "video" : "frame");
@@ -50,7 +50,7 @@ function InspectorBody({ event }: { event: Event }) {
       "Timestamp",
       `${formatTimestamp(event.timestamp)} (${formatRelative(event.timestamp)})`,
     ],
-    ["Camera", `#${event.camera_id}`],
+    ["Camera", cameraName],
     [
       "ROI",
       `x:${event.roi_x} · y:${event.roi_y} · ${event.roi_width}×${event.roi_height}`,
@@ -136,7 +136,13 @@ function InspectorBody({ event }: { event: Event }) {
   );
 }
 
-export function EvidenceInspector({ event }: { event: Event | null }) {
+export function EvidenceInspector({
+  event,
+  cameraName,
+}: {
+  event: Event | null;
+  cameraName?: string;
+}) {
   return (
     <section className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -148,7 +154,11 @@ export function EvidenceInspector({ event }: { event: Event | null }) {
       </header>
       {event ? (
         // key remounts the body per event so the previous snapshot never lingers
-        <InspectorBody key={event.id} event={event} />
+        <InspectorBody
+          key={event.id}
+          event={event}
+          cameraName={cameraName ?? `Camera #${event.camera_id}`}
+        />
       ) : (
         <p className="p-6 text-center text-sm text-muted-foreground">
           Select an event to inspect it.
