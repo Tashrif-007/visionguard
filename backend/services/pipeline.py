@@ -9,6 +9,7 @@ from backend.services.dehazing.gamma import apply_gamma
 from backend.services.dehazing.guided_filter import guided_upsample
 from backend.services.dehazing.radiance import recover_radiance
 from backend.services.dehazing.refine import refine_transmission
+from backend.services.dehazing.sky import apply_sky_floor, sky_weight
 from backend.services.dehazing.transmission import estimate_transmission
 
 
@@ -25,7 +26,8 @@ def dehaze_roi(roi: np.ndarray, model: TinyTransmissionCNN | None = None) -> np.
     """Run the full DCP dehazing pipeline on a BGR uint8 ROI.
 
     Frame → dark channel → atmospheric light (Top-K) → transmission →
-    Tiny CNN refinement (skipped when no model is loaded) → guided upsample
+    Tiny CNN refinement blended in by REFINE_BLEND (skipped when no model is loaded) → sky transmission
+    floor → guided upsample
     back to full ROI resolution → radiance recovery → gamma.
 
     The classical DCP stages run on a downscaled copy of the ROI (bounded by
@@ -54,8 +56,24 @@ def dehaze_roi(roi: np.ndarray, model: TinyTransmissionCNN | None = None) -> np.
     )
     if model is not None:
         gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        transmission = refine_transmission(
+        refined = refine_transmission(
             gray_small, dark, transmission, model, max_side=settings.refine_max_side
+        )
+        # Partial correction: on real haze the full CNN output scores below plain DCP,
+        # while a small step towards it scores above (measured on O-HAZE).
+        transmission = transmission + settings.refine_blend * (refined - transmission)
+
+    if settings.sky_t_floor > 0:
+        transmission = apply_sky_floor(
+            transmission,
+            sky_weight(
+                small,
+                min_value=settings.sky_min_value,
+                max_saturation=settings.sky_max_saturation,
+                search_fraction=settings.sky_search_fraction,
+                blur_sigma=settings.sky_edge_blur_sigma,
+            ),
+            floor=settings.sky_t_floor,
         )
 
     gray_full = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

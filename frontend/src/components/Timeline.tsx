@@ -1,4 +1,4 @@
-import { CalendarDays, Film } from "lucide-react";
+import { CalendarDays, Film, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EventThumb } from "@/components/EventThumb";
 import { cn } from "cn";
@@ -7,10 +7,12 @@ import type { Event } from "@/types";
 
 function EventCard({
   event,
+  cameraName,
   selected,
   onSelect,
 }: {
   event: Event;
+  cameraName: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -49,7 +51,7 @@ function EventCard({
           {event.roi_height}
         </span>
         <span className="label-mono text-muted-foreground">
-          Camera #{event.camera_id}
+          {cameraName}
           {event.frame_number !== null && ` · Frame #${event.frame_number}`}
         </span>
       </span>
@@ -57,21 +59,17 @@ function EventCard({
   );
 }
 
-export function Timeline({
+function DayGroups({
   events,
+  cameraNames,
   selectedId,
   onSelect,
 }: {
   events: Event[];
+  cameraNames: Map<number, string>;
   selectedId: number | null;
   onSelect: (id: number) => void;
 }) {
-  if (events.length === 0) {
-    return (
-      <p className="py-6 text-sm text-muted-foreground">No events found.</p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-5">
       {groupByDay(events, (event) => event.timestamp).map((group) => (
@@ -89,10 +87,79 @@ export function Timeline({
             <EventCard
               key={event.id}
               event={event}
+              cameraName={cameraLabel(cameraNames, event.camera_id)}
               selected={event.id === selectedId}
               onSelect={() => onSelect(event.id)}
             />
           ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+export function cameraLabel(
+  cameraNames: Map<number, string>,
+  cameraId: number,
+): string {
+  return cameraNames.get(cameraId) ?? `Camera #${cameraId}`;
+}
+
+/** Events newest-first; with `groupByCamera`, one block per camera (each split by day). */
+export function Timeline({
+  events,
+  cameraNames,
+  groupByCamera,
+  selectedId,
+  onSelect,
+}: {
+  events: Event[];
+  cameraNames: Map<number, string>;
+  groupByCamera: boolean;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  if (events.length === 0) {
+    return (
+      <p className="py-6 text-sm text-muted-foreground">No events found.</p>
+    );
+  }
+
+  if (!groupByCamera) {
+    return (
+      <DayGroups
+        events={events}
+        cameraNames={cameraNames}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  const byCamera = new Map<number, Event[]>();
+  for (const event of events) {
+    byCamera.set(event.camera_id, [...(byCamera.get(event.camera_id) ?? []), event]);
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {[...byCamera].map(([cameraId, items]) => (
+        <section key={cameraId} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Video className="h-4 w-4 text-primary" />
+              {cameraLabel(cameraNames, cameraId)}
+            </h2>
+            <span className="label-mono text-muted-foreground">
+              {items.length} event{items.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <DayGroups
+            events={items}
+            cameraNames={cameraNames}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
         </section>
       ))}
     </div>
